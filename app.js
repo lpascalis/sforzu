@@ -1,213 +1,240 @@
 
-// Helpers
 const $ = (id)=>document.getElementById(id);
-const show = (el,on)=>el.classList.toggle('hidden',!on);
-const n = (v)=>{v=+v; return isFinite(v)?v:NaN;}
-function fmt(x,unit=''){return isFinite(x)? (unit?`${x} ${unit}`:String(x)):'n.d.'}
+const show = id => $(id).classList.remove('hidden');
+const hide = id => $(id).classList.add('hidden');
+function nav(view){ ['home','watt','cpet','spiro'].forEach(hide); show(view); }
+nav('home');
+document.addEventListener('change',(e)=>{
+  if(e.target && e.target.id==='c_spiro_on'){
+    if(e.target.value==='si') show('c_spiro'); else hide('c_spiro');
+  }
+});
 
-// State
-let exam=null;
+// ===== Utilities =====
+function hrMax(age){ return Math.round(208 - 0.7*age); }
+function toPASPAD(s){ const m=(s||'').match(/(\d+)\s*\/\s*(\d+)/); return m?[+m[1],+m[2]]:[NaN,NaN]; }
+function vo2_cycle_mlkmin(W,kg){ return 10.8*W/Math.max(1,kg) + 7; } // ACSM
+function watt_pred(age,sex,kg){ const base=sex==='M'?3.5:3.0; const ageF=Math.max(0.55, 1-(Math.max(0,age-25)*0.005)); return Math.round(base*kg*ageF); }
+function pct(v,ref){ return Math.round(100*v/Math.max(1,ref)); }
+function badge(txt,cls){ return `<span class="badge ${cls}">${txt}</span>`; }
 
-// LMS race-neutral (equazioni fornite)
-function lms_rn_predict(age,sex,h_cm){
-  const H = Math.max(0.9,h_cm/100), lnH=Math.log(H), lnA=Math.log(Math.max(3,age));
-  const Ms=0,Ss=0; const o={};
+// ===== Protocol suggestion engine =====
+function suggestCore(prefix){
+  const age=+$((prefix+'age')).value, sex=$((prefix+'sex')).value;
+  const H=+$((prefix+'h')).value, kg=+$((prefix+'w')).value;
+  const mode=$((prefix+'mode')).value, prof=$((prefix+'prof')).value, act=+$((prefix+'act')).value||0;
+  // predicted peak watts as target reference
+  const wp = watt_pred(age,sex,kg);
+  // Defaults by profile
+  let targetFrac=0.9, wstart=20, rampMin=10, rampMax=20, rampBase=15;
+  let note='';
+  switch(prof){
+    case 'sedent': targetFrac=0.8; wstart=10; rampMin=10; rampMax=15; rampBase=12; note='Sedentario: progressione prudente.'; break;
+    case 'ath': targetFrac=1.1; wstart=50; rampMin=20; rampMax=30; rampBase=25; note='Atleta: incremento sostenuto.'; break;
+    case 'elder': targetFrac=0.7; wstart=0; rampMin=5; rampMax=10; rampBase=8; note='Anziano/frailty: rampa lenta.'; break;
+    case 'ihd': targetFrac=0.85; wstart=10; rampMin=10; rampMax=15; rampBase=12; note='Cardiopatia ischemica: evitare grandi step.'; break;
+    case 'hf': targetFrac=0.75; wstart=0; rampMin=5; rampMax=10; rampBase=8; note='Scompenso: rampa bassa (5–10 W/min).'; break;
+    case 'copd': targetFrac=0.8; wstart=10; rampMin=10; rampMax=15; rampBase=10; note='BPCO/Asma: preferire durata >10′ con rampa 10–15.'; break;
+    case 'postcovid': targetFrac=0.8; wstart=10; rampMin=10; rampMax=15; rampBase=12; note='Decondizionamento: rampa 10–15 W/min.'; break;
+    default: targetFrac=0.9; wstart=20; rampMin=10; rampMax=20; rampBase=15; note='Standard.';
+  }
+  // Activity adjustment: +/- ~2 W/min per ogni 2 h
+  const adj = Math.max(-6, Math.min(6, Math.round((act-2)/2)*2));
+  let ramp = rampBase + adj;
+  // Target duration 10′ to reach targetFrac * predicted
+  const targetW = Math.max(40, Math.round(wp*targetFrac));
+  ramp = Math.round(Math.max(rampMin, Math.min(rampMax, (targetW - wstart)/10 )));
+  // Treadmill hint
+  let protoText='';
+  if(mode==='treadmill'){
+    if(prof==='elder' || prof==='hf' || prof==='sedent') protoText='Treadmill: Modified Bruce / Naughton (step 2–3′).';
+    else if(prof==='ath') protoText='Treadmill: Bruce / Ramp personalizzato (step 2′).';
+    else protoText='Treadmill: Modified Bruce consigliato per 8–12′.';
+  }
+  // Estimated duration if Wmax equals target
+  const dur = Math.max(6, Math.min(14, (targetW - wstart)/Math.max(1,ramp)));
+  return {wstart, ramp, dur:+dur.toFixed(1), targetW, wp, note, protoText};
+}
+function pushSuggestion(prefix,s){
+  $((prefix+'wstart')).value = s.wstart;
+  $((prefix+'ramp')).value = s.ramp;
+  $((prefix+'dur')).value = s.dur;
+  const tip = $((prefix+'tip'));
+  tip.innerHTML = `Suggerito: <b>start ${s.wstart} W</b>, <b>rampa ${s.ramp} W/min</b>, durata attesa ≈ <b>${s.dur}′</b>. Target ≈ ${s.targetW} W (pred. ${s.wp} W). ${s.protoText} <br><span class="small">${s.note}</span>`;
+}
+function suggest(prefix){ const s=suggestCore(prefix); pushSuggestion(prefix,s); show(prefix==='w_'?'watt-res':'cpet-res'); }
+
+// ===== WATT TEST =====
+function calcWatt(){
+  const age=+$('w_age').value, sex=$('w_sex').value, h=+$('w_h').value, kg=+$('w_w').value;
+  const mode=$('w_mode').value, ramp=+$('w_ramp').value||0, wstart=+$('w_wstart').value||0, dur=+$('w_dur').value||0;
+  const wmax=+$('w_wmax').value||0; let wkg=+$('w_wkg').value; if(!(wkg>0)&&kg>0) wkg=+(wmax/kg).toFixed(2);
+  const hr0=+$('w_hr0').value||0, hrp=+$('w_hrp').value||0, hrr1=+$('w_hrr1').value;
+  const [pas0,pad0]=toPASPAD($('w_bp0').value), [pasp,padp]=toPASPAD($('w_bpp').value);
+  const hr_th=hrMax(age), hr_pct=pct(hrp,hr_th);
+  const pas_delta=pasp-pas0;
+  const wpred=watt_pred(age,sex,kg);
+  const wpct=pct(wmax,wpred);
+  const vo2_est = (mode==='cycle' && wmax>0 && kg>0) ? vo2_cycle_mlkmin(wmax,kg) : NaN;
+  const mets = isNaN(vo2_est)? '-' : (vo2_est/3.5).toFixed(1);
+  const chron = (hrp-hr0)/Math.max(1,(hr_th-hr0));
+  const chron_txt = chron>=0.8 ? badge('adeguata','ok') : (chron>=0.7 ? badge('borderline','warn') : badge('ridotta','bad'));
+  const hrr_txt = (hrr1>=12)? badge('nella norma','ok') : (hrr1>=8 ? badge('borderline','warn') : badge('ridotto','bad'));
+  const bp_txt = (pas_delta>=20 && pasp<= (sex==='M'?210:190)) ? badge('fisiologica','ok') : (pasp>(sex==='M'?210:190)? badge('ipertensiva','bad') : badge('inadeguata','warn'));
+  const cap_txt = (wpct>=85)? badge('nei limiti','ok') : (wpct>=70 ? badge('liev. ridotta','warn') : badge('ridotta','bad'));
+
+  const html = `
+  <h3 class="title">Risultati Watt Test</h3>
+  <div class="kpi">
+    <div class="card"><div class="muted">Watt massimi</div><div class="v">${wmax||'-'} W</div></div>
+    <div class="card"><div class="muted">W/kg</div><div class="v">${(wkg>0)?wkg:'-'}</div></div>
+    <div class="card"><div class="muted">% predetto</div><div class="v">${isFinite(wpct)?wpct:'-'}%</div></div>
+    <div class="card"><div class="muted">METs (stima)</div><div class="v">${mets}</div></div>
+  </div>
+  <div class="section">Interpretazione sintetica</div>
+  <table>
+    <tr><th>Parametro</th><th>Valore</th><th>Cut-off</th><th>Esito</th></tr>
+    <tr><td>Riserva cronotropa</td><td>${Math.round(chron*100)}%</td><td>≥80%</td><td>${chron_txt}</td></tr>
+    <tr><td>HR recovery 1′</td><td>${isNaN(hrr1)?'-':hrr1} bpm</td><td>≥12</td><td>${hrr_txt}</td></tr>
+    <tr><td>Risposta pressoria</td><td>ΔPAS ${isNaN(pas_delta)?'-':pas_delta} (max ${pasp||'-'})</td><td>ΔPAS ≥20; max ≤ ${sex==='M'?210:190}</td><td>${bp_txt}</td></tr>
+    <tr><td>Capacità funzionale</td><td>${isFinite(wpct)?wpct:'-'}% del pred.</td><td>≥85%</td><td>${cap_txt}</td></tr>
+  </table>`;
+  const box=$('watt-res'); box.innerHTML=html; show('watt-res');
+}
+
+// ===== CPET =====
+function calcCPET(){
+  const age=+$('c_age').value, sex=$('c_sex').value, kg=+$('c_w').value;
+  const wstart=+$('c_wstart').value||0, dur=+$('c_dur').value||0;
+  let wmax=+$('c_wmax').value||0; const wmax2=+$('c_wmax2').value||0; if(wmax2>0) wmax=wmax2;
+  const vo2pk=+$('c_vo2pk').value, rer=+$('c_rer').value;
+  const vevco2=+$('c_vevco2').value, o2pulse=+$('c_o2pulse').value;
+  let vo2wr=+$('c_vo2wr').value;
+  const hrp=+$('c_hrp').value, hrr1=+$('c_hrr1').value;
+  const [pasp,padp]=toPASPAD($('c_bpp').value);
+  if(!(vo2wr>0) && vo2pk>0 && kg>0 && wmax>wstart){
+    const vo2_rest = 3.5*kg; // 1 MET
+    vo2wr = +(((vo2pk*kg - vo2_rest)/(wmax-wstart)).toFixed(1));
+  }
+
+  const hr_th=hrMax(age), hr_pct=Math.round(100*hrp/Math.max(1,hr_th));
+  const mets = vo2pk>0 ? (vo2pk/3.5).toFixed(1) : '-';
+  const ve_status = (vevco2<=30)? badge('normale','ok') : (vevco2<=34? badge('borderline','warn') : badge('aumentato','bad'));
+  const vwr_status = (vo2wr>=9 && vo2wr<=12) ? badge('normale','ok') : (vo2wr>=8.5 ? badge('liev. ridotto','warn') : badge('ridotto','bad'));
+  const hrr_txt = (hrr1>=12)? badge('nella norma','ok') : (hrr1>=8 ? badge('borderline','warn') : badge('ridotto','bad'));
+  const effort_txt = (rer>=1.10)? badge('massimale','ok') : (rer>=1.00? badge('quasi','warn'): badge('non massimale','bad'));
+  const hr_txt = (hr_pct>=85)? badge('adeguata','ok') : (hr_pct>=80? badge('borderline','warn'): badge('inadeguata','bad'));
+  const bp_txt = (pasp>0)? ((pasp<= (sex==='M'?210:190))? badge('ok','ok') : badge('ipertensiva','bad')) : '-';
+
+  let perf=0;
+  if(vo2pk>0){ perf+=Math.min(40,(vo2pk/50)*40); }
+  if(vo2wr>0){ perf+=(vo2wr>=10?20:(vo2wr>=8.5?14:6)); }
+  if(vevco2>0){ perf+=(vevco2<=30?20:(vevco2<=34?12:4)); }
+  if(hrr1>0){ perf+=(hrr1>=12?10:(hrr1>=8?6:2)); }
+  perf+=(hr_pct>=85?10:(hr_pct>=80?6:2));
+  perf=Math.round(Math.min(100,perf));
+  const perfTxt = perf>=80?'ottima':(perf>=65?'buona':(perf>=50?'discreta':'ridotta'));
+
+  const pattern = [(vevco2>34?'ventilatorio':''),(vo2wr>0 && vo2wr<9?'periferico':''),(o2pulse>0 && o2pulse<8?'centrale':'')].filter(Boolean).join(' + ') || 'nessun pattern prevalente';
+
+  let arena=0;
+  if(vo2pk>0){ if(vo2pk<14) arena+=2; else if(vo2pk<20) arena+=1; }
+  if(vevco2>0){ if(vevco2>36) arena+=2; else if(vevco2>34) arena+=1; }
+  if(hrr1>0 && hrr1<12) arena+=1;
+  if(rer>0 && rer<1.05) arena+=1;
+  const arenaRisk = (arena<=1)? badge('basso','ok') : (arena<=3? badge('moderato','warn') : badge('alto','bad'));
+
+  const html = `
+  <h3 class="title">Risultati CPET</h3>
+  <div class="kpi">
+    <div class="card"><div class="muted">VO₂ picco</div><div class="v">${isNaN(vo2pk)?'-':vo2pk} ml/kg/min (${mets} METs)</div></div>
+    <div class="card"><div class="muted">Watt massimi</div><div class="v">${wmax||'-'} W</div></div>
+    <div class="card"><div class="muted">VE/VCO₂</div><div class="v">${isNaN(vevco2)?'-':vevco2} ${ve_status}</div></div>
+    <div class="card"><div class="muted">VO₂/WR</div><div class="v">${isNaN(vo2wr)?'-':vo2wr} ml/min/W ${vwr_status}</div></div>
+    <div class="card"><div class="muted">RER</div><div class="v">${isNaN(rer)?'-':rer} ${effort_txt}</div></div>
+    <div class="card"><div class="muted">HR picco</div><div class="v">${hrp||'-'} bpm (${isNaN(hr_pct)?'-':hr_pct}%) ${hr_txt}</div></div>
+    <div class="card"><div class="muted">HRR 1′</div><div class="v">${isNaN(hrr1)?'-':hrr1} bpm ${hrr_txt}</div></div>
+  </div>
+
+  <div class="section">Indice composito</div>
+  <p class="small">Performance globale: <b>${perf}/100</b> (${perfTxt}). Pattern: <b>${pattern}</b>. PA picco: ${pasp||'-'}/${padp||'-'} ${bp_txt}</p>
+
+  <div class="section">Score e cut-off</div>
+  <table>
+    <tr><th>Parametro</th><th>Valore</th><th>Cut-off clinico</th><th>Esito</th></tr>
+    <tr><td>VE/VCO₂</td><td>${isNaN(vevco2)?'-':vevco2}</td><td>≤30 normale; 31–34 borderline; ≥35 patologico</td><td>${ve_status}</td></tr>
+    <tr><td>VO₂/WR</td><td>${isNaN(vo2wr)?'-':vo2wr} ml/min/W</td><td>9–12 normale; &lt;8.5 ridotto</td><td>${vwr_status}</td></tr>
+    <tr><td>HRR 1′</td><td>${isNaN(hrr1)?'-':hrr1} bpm</td><td>≥12 normale</td><td>${hrr_txt}</td></tr>
+    <tr><td>RER</td><td>${isNaN(rer)?'-':rer}</td><td>≥1.10 massimale</td><td>${effort_txt}</td></tr>
+    <tr><td>Arena (0–6)</td><td>${arena}</td><td>0–1 basso; 2–3 moderato; ≥4 alto</td><td>${arenaRisk}</td></tr>
+  </table>`;
+
+  const box=$('cpet-res'); box.innerHTML=html; show('cpet-res');
+}
+
+// ===== SPIROMETRY (GLI-like simplified) =====
+function predSpiro(sex, age, Hcm){
+  const H=Math.log(Hcm), A=Math.log(age);
   if(sex==='F'){
-    o.FEV1_pred = Math.exp(-10.901689 + 2.385928*lnH - 0.076386*lnA + Ms);
-    o.FVC_pred  = Math.exp(-12.055901 + 2.621579*lnH - 0.035975*lnA + Ms);
-    o.RAT_pred  = Math.exp(  0.9189568 - 0.1840671*lnH - 0.0461306*lnA + Ms);
-    o.L_FEV1=1.21388; o.S_FEV1=Math.exp(-2.364047 + 0.129402*lnA + Ss);
-    o.L_FVC =0.899;   o.S_FVC =Math.exp(-2.310148 + 0.120428*lnA + Ss);
-    o.L_RAT=(6.6490 - 0.9920*lnA); o.S_RAT=Math.exp(-3.171582 + 0.144358*lnA + Ss);
-  } else {
-    o.FEV1_pred = Math.exp(-11.399108 + 2.462664*lnH - 0.011394*lnA + Ms);
-    o.FVC_pred  = Math.exp(-12.629131 + 2.727421*lnH + 0.009174*lnA + Ms);
-    o.RAT_pred  = Math.exp(  1.022608  - 0.218592*lnH - 0.027586*lnA + Ms);
-    o.L_FEV1=1.22703; o.S_FEV1=Math.exp(-2.256278 + 0.080729*lnA + Ss);
-    o.L_FVC =0.9346;  o.S_FVC =Math.exp(-2.195595 + 0.068466*lnA + Ss);
-    o.L_RAT=(3.8243 - 0.3328*lnA); o.S_RAT=Math.exp(-2.882025 + 0.068889*lnA + Ss);
-  }
-  return o;
-}
-function z_from_LMS(meas,L,M,S){ if(!(isFinite(meas)&&isFinite(L)&&isFinite(M)&&isFinite(S)&&M>0&&S>0)) return NaN; if(Math.abs(L)<1e-6) return Math.log(meas/M)/S; return (Math.pow(meas/M,L)-1)/(L*S); }
-function lln_from_LMS(L,M,S){ if(!(isFinite(L)&&isFinite(M)&&isFinite(S)&&M>0&&S>0)) return NaN; const z=-1.645; if(Math.abs(L)<1e-6) return M*Math.exp(z*S); return M*Math.pow(1+L*S*z,1/L); }
-
-function quickPred(age,sex,h){ let FEV1=(sex==='M'?4.3:3.5)-0.024*(age-25); let FVC=(sex==='M'?5.3:4.2)-0.02*(age-25); return {fev1:FEV1,fvc:FVC}; }
-
-// Wizard
-$('sel_watt').addEventListener('click',()=>setExam('watt'));
-$('sel_cpet').addEventListener('click',()=>setExam('cpet'));
-$('switch_exam').addEventListener('click',()=>setExam(null));
-
-function setExam(kind){
-  exam=kind;
-  show($('start'), kind===null);
-  const on=(kind==='watt'||kind==='cpet');
-  show($('common'), on);
-  show($('proto_card'), on);
-  show($('watt_block'), kind==='watt');
-  show($('spiro_block'), kind==='cpet');
-  show($('cpet_block'), kind==='cpet');
-  show($('report_card'), on);
-  if(on){ suggestProtocol(); if(kind==='cpet'){ renderSpiroPred(); renderSpiroLMS(); } }
-}
-
-// Protocollo suggerito
-function suggestProtocol(){
-  const erg=$('ergotype').value, pa=n($('pa_hours').value), dx=($('dx').value||'').toLowerCase();
-  let ramp=(erg==='tm')?1.0:15, start=(erg==='tm')?20:25, dur=8;
-  if(pa>=5){ ramp=(erg==='tm')?1.2:20; start=(erg==='tm')?30:40; }
-  if(dx.includes('ischemi')||dx.includes('scomp')){ ramp=(erg==='tm')?0.6:10; start=(erg==='tm')?15:20; }
-  $('proto_text').innerHTML=`Suggerimento: rampa <b>${ramp} ${erg==='tm'?'km/h eq.':'W/min'}</b>, carico iniziale <b>${start} ${erg==='tm'?'%':'W'}</b>, durata target <b>${dur}–12 min</b>.`;
-  return {ramp,start,dur};
-}
-$('apply_proto').addEventListener('click',()=>{
-  const p=suggestProtocol(); if(exam==='watt'){ $('w_ramp').value=p.ramp; $('w_start').value=p.start; $('w_dur').value=p.dur; }
-});
-
-// Spirometria
-function renderSpiroPred(){
-  const age=n($('age').value), sex=$('sex').value, h=n($('height').value);
-  const m=$('sp_method').value, box=$('sp_pred_box');
-  if(!isFinite(age)||!isFinite(h)){ box.innerHTML='<span class="hint">Inserisci età e altezza…</span>'; return; }
-  if(m==='lms_rn'){
-    const p=lms_rn_predict(age,sex,h);
-    box.innerHTML=`Predetti (LMS): FEV₁ <b>${p.FEV1_pred.toFixed(2)} L</b>, FVC <b>${p.FVC_pred.toFixed(2)} L</b>, rapporto <b>${(p.RAT_pred*100).toFixed(1)}%</b>`;
-  } else {
-    const q=quickPred(age,sex,h); box.innerHTML=`Stima rapida: FEV₁ ~ <b>${q.fev1.toFixed(2)} L</b>, FVC ~ <b>${q.fvc.toFixed(2)} L</b>`;
+    return {
+      FEV1: Math.exp(-10.901689 + 2.385928*H - 0.076386*A),
+      FVC:  Math.exp(-12.055901 + 2.621579*H - 0.035975*A),
+      R:    Math.exp(0.9189568 - 0.1840671*H - 0.0461306*A)
+    };
+  }else{
+    return {
+      FEV1: Math.exp(-11.399108 + 2.462664*H - 0.011394*A),
+      FVC:  Math.exp(-12.629131 + 2.727421*H + 0.009174*A),
+      R:    Math.exp(1.022608 - 0.218592*H - 0.027586*A)
+    };
   }
 }
-function renderSpiroLMS(){
-  const txt=$('sp_lms_text'), flag=$('sp_flag_box');
-  if($('sp_method').value!=='lms_rn'){ txt.textContent='—'; flag.innerHTML=''; return; }
-  const age=n($('age').value), sex=$('sex').value, h=n($('height').value);
-  if(!isFinite(age)||!isFinite(h)){ txt.textContent='Inserisci età e altezza…'; flag.innerHTML=''; return; }
-  const p=lms_rn_predict(age,sex,h);
-  const FEV1=n($('sp_fev1').value), FVC=n($('sp_fvc').value);
-  let ratio=n($('sp_ratio').value); if(!isFinite(ratio)&&isFinite(FEV1)&&isFinite(FVC)&&FVC>0) ratio=100*FEV1/FVC;
-  const pR=p.RAT_pred*100;
-  const z1=z_from_LMS(FEV1,p.L_FEV1,p.FEV1_pred,p.S_FEV1);
-  const z2=z_from_LMS(FVC ,p.L_FVC ,p.FVC_pred ,p.S_FVC );
-  const zR=z_from_LMS(ratio,p.L_RAT ,pR        ,p.S_RAT );
-  const lln1=lln_from_LMS(p.L_FEV1,p.FEV1_pred,p.S_FEV1);
-  const lln2=lln_from_LMS(p.L_FVC ,p.FVC_pred ,p.S_FVC );
-  const llnR=lln_from_LMS(p.L_RAT ,pR         ,p.S_RAT );
-  const pct1=isFinite(FEV1)?Math.round(100*FEV1/p.FEV1_pred):NaN;
-  const pct2=isFinite(FVC)? Math.round(100*FVC /p.FVC_pred ):NaN;
-  const pctR=isFinite(ratio)?Math.round(100*ratio/pR):NaN;
-  txt.innerHTML = `FEV₁ pred: <b>${p.FEV1_pred.toFixed(2)} L</b>${isFinite(pct1)?' — '+pct1+'%':''}${isFinite(z1)?' — z '+z1.toFixed(2):''}${isFinite(lln1)?' — LLN '+lln1.toFixed(2)+' L':''}`+
-                  ` • FVC pred: <b>${p.FVC_pred.toFixed(2)} L</b>${isFinite(pct2)?' — '+pct2+'%':''}${isFinite(z2)?' — z '+z2.toFixed(2):''}${isFinite(lln2)?' — LLN '+lln2.toFixed(2)+' L':''}`+
-                  ` • Rapporto pred: <b>${pR.toFixed(1)}%</b>${isFinite(pctR)?' — '+pctR+'%':''}${isFinite(zR)?' — z '+zR.toFixed(2):''}${isFinite(llnR)?' — LLN '+llnR.toFixed(1)+'%':''}`;
-  let msgs=[];
-  if(isFinite(ratio)&&isFinite(llnR)&&ratio<llnR) msgs.push(`<span class="bad">Compatibile con ostruzione (rapporto sotto LLN)</span>`);
-  if(isFinite(FVC)&&isFinite(lln2)&&FVC<lln2 && !(isFinite(ratio)&&isFinite(llnR)&&ratio<llnR)) msgs.push(`<span class="warn">Compatibile con riduzione FVC (possibile restrizione)</span>`);
-  if(msgs.length===0) msgs.push(`<span class="ok">Valori spirometrici nei limiti rispetto ai predetti</span>`);
-  flag.innerHTML=msgs.join('<br>');
+function lms(sex, age){
+  const A=Math.log(age);
+  if(sex==='F'){
+    return { Lf:1.21388, Sf:Math.exp(-2.364047 + 0.129402*A),
+             Lv:0.899,   Sv:Math.exp(-2.310148 + 0.120428*A),
+             Lr:6.6490 - 0.9920*A, Sr:Math.exp(-3.171582 + 0.144358*A) };
+  }else{
+    return { Lf:1.22703, Sf:Math.exp(-2.256278 + 0.080729*A),
+             Lv:0.9346,  Sv:Math.exp(-2.195595 + 0.068466*A),
+             Lr:3.8243 - 0.3328*A, Sr:Math.exp(-2.882025 + 0.068889*A) };
+  }
+}
+function zscore(meas,L,M,S){ return L===0 ? Math.log(meas/M)/S : (Math.pow(meas/M,L)-1)/(L*S); }
+function llnFromZ(L,M,S){ const z=-1.645; return L===0 ? M*Math.exp(z*S) : M*Math.pow(1+L*S*z,1/L); }
+
+function calcSpiro(){
+  const age=+$('s_age').value, sex=$('s_sex').value, H=+$('s_h').value;
+  const FEV1m=+$('s_fev1').value, FVCm=+$('s_fvc').value;
+  let Rm=+$('s_ratio').value; if(!(Rm>0) && FVCm>0) Rm=FEV1m/FVCm;
+  const P=predSpiro(sex,age,H), L=lms(sex,age);
+  const zF=zscore(FEV1m,L.Lf,P.FEV1,L.Sf), zV=zscore(FVCm,L.Lv,P.FVC,L.Sv), zR=zscore(Rm,L.Lr,P.R,L.Sr);
+  const LLN_F=llnFromZ(L.Lf,P.FEV1,L.Sf), LLN_V=llnFromZ(L.Lv,P.FVC,L.Sv), LLN_R=llnFromZ(L.Lr,P.R,L.Sr);
+  const pctF=Math.round(100*FEV1m/P.FEV1), pctV=Math.round(100*FVCm/P.FVC), pctR=Math.round(100*Rm/P.R);
+  const obstructive = Rm < LLN_R;
+  const restrictive = (!obstructive && FVCm < LLN_V);
+  const mixed = (obstructive && FVCm < LLN_V);
+  let pattern='normale'; if(mixed) pattern='misto'; else if(obstructive) pattern='ostruttivo'; else if(restrictive) pattern='restrittivo';
+
+  const res=$('spiro-res');
+  res.innerHTML = `
+  <h3 class="title">Risultati Spirometria</h3>
+  <div class="kpi">
+    <div class="card"><div class="muted">FEV₁</div><div class="v">${FEV1m.toFixed(2)} L</div><div class="muted">${pctF}% del pred.</div></div>
+    <div class="card"><div class="muted">FVC</div><div class="v">${FVCm.toFixed(2)} L</div><div class="muted">${pctV}% del pred.</div></div>
+    <div class="card"><div class="muted">FEV₁/FVC</div><div class="v">${Rm.toFixed(2)}</div><div class="muted">${pctR}% del pred.</div></div>
+    <div class="card"><div class="muted">Pattern</div><div class="v">${pattern}</div></div>
+  </div>
+  <div class="section">Dettaglio (predetti, LLN, Z-score)</div>
+  <table>
+    <tr><th>Parametro</th><th>Misurato</th><th>Predetto</th><th>LLN</th><th>% pred.</th><th>Z</th></tr>
+    <tr><td>FEV₁</td><td>${FEV1m.toFixed(2)}</td><td>${P.FEV1.toFixed(2)}</td><td>${LLN_F.toFixed(2)}</td><td>${pctF}%</td><td>${zF.toFixed(2)}</td></tr>
+    <tr><td>FVC</td><td>${FVCm.toFixed(2)}</td><td>${P.FVC.toFixed(2)}</td><td>${LLN_V.toFixed(2)}</td><td>${pctV}%</td><td>${zV.toFixed(2)}</td></tr>
+    <tr><td>FEV₁/FVC</td><td>${Rm.toFixed(2)}</td><td>${P.R.toFixed(2)}</td><td>${LLN_R.toFixed(2)}</td><td>${pctR}%</td><td>${zR.toFixed(2)}</td></tr>
+  </table>`;
+  show('spiro-res');
 }
 
-// WATT
-function HRmax_pred(age){ if(!isFinite(age))return NaN; return 208-0.7*age; }
-function chronotropicReserve(age,HRrest,HRpeak){ const Hmax=HRmax_pred(age); if(![age,HRrest,HRpeak,Hmax].every(isFinite))return NaN; const num=HRpeak-HRrest, den=Hmax-HRrest; if(den<=0)return NaN; return num/den; }
-function classifyCR(cr){ if(!isFinite(cr))return 'n.d.'; if(cr<0.62)return `${cr.toFixed(2)} — ridotta`; if(cr<0.80)return `${cr.toFixed(2)} — borderline`; return `${cr.toFixed(2)} — nei limiti`; }
-
-function analyzeWatt(){
-  const wmax=n($('r_wmax').value), kg=n($('weight').value);
-  const wkg = isFinite(n($('r_wkg').value))? n($('r_wkg').value) : (isFinite(wmax)&&isFinite(kg)&&kg>0? wmax/kg : NaN);
-  if(!isNaN(wkg)) $('r_wkg').value=wkg.toFixed(2);
-  const hrrest=n($('r_hrrest').value), hrmax=n($('r_hrmax').value), pas=n($('r_pas').value);
-  const dp = (isFinite(hrmax)&&isFinite(pas))? (hrmax*pas):NaN; if(isFinite(dp)) $('r_dp').value=dp;
-  const dur=n($('r_dur').value);
-  const mets=isFinite(wmax)?(wmax/70):NaN; if(isFinite(mets)) $('r_mets').value=mets.toFixed(1);
-  const cr = chronotropicReserve(n($('age').value), hrrest, hrmax);
-  const hrrec1=n($('r_hrrec1').value);
-  const pressTrend = (isFinite(pas)&&pas>220)?'risposta ipertensiva possibile':'risposta pressoria nei limiti';
-  $('watt_results').innerHTML = `Prestazione: <b>${fmt(wmax,'W')}</b> (${isFinite(wkg)?wkg.toFixed(2)+' W/kg':'n.d.'}), durata <b>${fmt(dur,'min')}</b>, METs ~ <b>${isFinite(mets)?mets.toFixed(1):'n.d.'}</b>.<br>`+
-    `FC: riposo ${fmt(hrrest,'bpm')}, picco ${fmt(hrmax,'bpm')} — Riserva cronotropa: <b>${classifyCR(cr)}</b>. HRR 1' ${fmt(hrrec1,'bpm')}.<br>`+
-    `Pressione: PAS/PAD picco ${fmt(n($('r_pas').value),'mmHg')}/${fmt(n($('r_pad').value),'mmHg')} — ${pressTrend}.`;
-}
-$('analyze_watt').addEventListener('click', analyzeWatt);
-
-// CPET
-$('analyze_cpet').addEventListener('click', ()=>{
-  const age=n($('age').value);
-  const [hr0,hrp]= ( $('r_hr_pair').value||'/' ).split('/').map(v=>n(v));
-  const hrrest=isFinite(hr0)?hr0:n($('r_hrrest').value);
-  const hrmax =isFinite(hrp)?hrp:n($('r_hrmax').value);
-  const cr = chronotropicReserve(age, hrrest, hrmax);
-  const vo2=n($('r_vo2').value), rer=n($('r_rer').value), slope=n($('r_vevco2').value);
-  const slopeTxt = isFinite(slope)? `${slope.toFixed(1)} (${slope>34?'elevata':'nei limiti'})` : 'n.d.';
-  const at = n($('r_at').value), br=n($('r_br').value), vemvv=n($('r_vemvv').value);
-  const eqo2=n($('r_eqo2').value), eqco2=n($('r_eqco2').value), pet=n($('r_petco2').value), oues=n($('r_oues').value);
-  const lines=[
-    `VO₂ picco: <b>${fmt(vo2,'ml/min/kg')}</b>, RER: <b>${fmt(rer)}</b>, VE/VCO₂ slope: <b>${slopeTxt}</b>`,
-    `Riserva cronotropa: <b>${classifyCR(cr)}</b>. AT: <b>${fmt(at,'ml/min/kg')}</b>, BR al picco: <b>${fmt(br,'%')}</b>, VE/MVV: <b>${fmt(vemvv,'%')}</b>`,
-    `EqO₂: <b>${fmt(eqo2)}</b>, EqCO₂: <b>${fmt(eqco2)}</b>, PETCO₂ @AT: <b>${fmt(pet,'mmHg')}</b>, OUES: <b>${fmt(oues)}</b>`
-  ];
-  $('cpet_results').innerHTML = lines.join('<br>');
-});
-
-// Referti
-function spiroSummaryShort(){
-  const age=n($('age').value), sex=$('sex').value, h=n($('height').value);
-  const FEV1=n($('sp_fev1').value), FVC=n($('sp_fvc').value);
-  let ratio=n($('sp_ratio').value); if(!isFinite(ratio)&&isFinite(FEV1)&&isFinite(FVC)&&FVC>0) ratio=100*FEV1/FVC;
-  const p=lms_rn_predict(age,sex,h); const pR=p.RAT_pred*100;
-  const z1=z_from_LMS(FEV1,p.L_FEV1,p.FEV1_pred,p.S_FEV1);
-  const z2=z_from_LMS(FVC ,p.L_FVC ,p.FVC_pred ,p.S_FVC );
-  const zR=z_from_LMS(ratio,p.L_RAT ,pR        ,p.S_RAT );
-  return `Spirometria: FEV₁ ${isFinite(FEV1)?FEV1.toFixed(2)+' L':'n.d.'} (z ${isFinite(z1)?z1.toFixed(2):'n.d.'}), FVC ${isFinite(FVC)?FVC.toFixed(2)+' L':'n.d.'} (z ${isFinite(z2)?z2.toFixed(2):'n.d.'}), rapporto ${isFinite(ratio)?ratio.toFixed(1)+'%':'n.d.'} (z ${isFinite(zR)?zR.toFixed(2):'n.d.'}).`;
-}
-
-function wattShortReport(){
-  const wmax=n($('r_wmax').value), kg=n($('weight').value), wkg = isFinite(n($('r_wkg').value))? n($('r_wkg').value) : (isFinite(wmax)&&isFinite(kg)&&kg>0? wmax/kg:NaN);
-  const mets=isFinite(wmax)? (wmax/70):NaN, dur=n($('r_dur').value);
-  const cr = chronotropicReserve(n($('age').value), n($('r_hrrest').value), n($('r_hrmax').value));
-  const rec1=n($('r_hrrec1').value);
-  return `Watt test: carico max ${fmt(wmax,'W')} (${isFinite(wkg)?wkg.toFixed(2)+' W/kg':'n.d.'}), durata ${fmt(dur,'min')}. `+
-         `Riserva cronotropa: ${classifyCR(cr)}. HR recovery 1': ${fmt(rec1,'bpm')}. METs stimati: ${isFinite(mets)?mets.toFixed(1):'n.d.'}.`;
-}
-function wattLongReport(){
-  const ergo=$('ergotype').value==='tm'?'treadmill':'cicloergometro';
-  const ramp=$('w_ramp').value||'n.d.', w0=$('w_start').value||'n.d.';
-  const hrrest=$('r_hrrest').value||'n.d.', hrmax=$('r_hrmax').value||'n.d.', pas=$('r_pas').value||'n.d.', pad=$('r_pad').value||'n.d.';
-  const wmax=$('r_wmax').value||'n.d.', mets=(+$('r_wmax').value/70)||NaN, dur=$('r_dur').value||'n.d.';
-  return `Il test da sforzo al ${ergo} è stato eseguito con protocollo a rampa di ${ramp} W/min, carico iniziale ${w0} W.
-Condizioni basali: FC ${hrrest} bpm, PA ${pas}/${pad} mmHg.
-Carico massimo ${wmax} W (≈ ${isFinite(mets)?mets.toFixed(1):'n.d.'} METs) dopo ${dur} minuti. FC picco ${hrmax} bpm. Riserva cronotropa ${classifyCR(chronotropicReserve(n($('age').value), n($('r_hrrest').value), n($('r_hrmax').value)))}.
-Risposta pressoria e sintomi riportati interpretati in modo neutro. Interpretazione contestuale ai predetti e al profilo clinico.`;
-}
-
-function cpetShortReport(){
-  const age=n($('age').value);
-  const [hr0,hrp]= ( $('r_hr_pair').value||'/' ).split('/').map(v=>n(v));
-  const cr = chronotropicReserve(age, isFinite(hr0)?hr0:n($('r_hrrest').value), isFinite(hrp)?hrp:n($('r_hrmax').value));
-  const vo2=n($('r_vo2').value), rer=n($('r_rer').value), slope=n($('r_vevco2').value);
-  const slopeTxt = isFinite(slope)? `${slope.toFixed(1)} (${slope>34?'elevata':'nei limiti'})` : 'n.d.';
-  const at=n($('r_at').value), br=n($('r_br').value);
-  return `CPET: VO₂ picco ${fmt(vo2,'ml/min/kg')}, RER ${fmt(rer)}, VE/VCO₂ ${slopeTxt}. `+
-         `AT ${fmt(at,'ml/min/kg')}, BR ${fmt(br,'%')}. `+
-         `Riserva cronotropa: ${classifyCR(cr)}. `+ spiroSummaryShort();
-}
-function cpetLongReport(){
-  const ergo=$('ergotype').value==='tm'?'treadmill':'cicloergometro';
-  const vo2=$('r_vo2').value||'n.d.', rer=$('r_rer').value||'n.d.', dur=$('r_dur_c').value||'n.d.';
-  const slope=$('r_vevco2').value||'n.d.', o2p=$('r_o2pulse').value||'n.d.', at=$('r_at').value||'n.d.', br=$('r_br').value||'n.d.';
-  const vemvv=$('r_vemvv').value||'n.d.', eqo2=$('r_eqo2').value||'n.d.', eqco2=$('r_eqco2').value||'n.d.', pet=$('r_petco2').value||'n.d.', oues=$('r_oues').value||'n.d.';
-  return `Il test cardiopolmonare è stato eseguito su ${ergo}. Parametri principali: VO₂ picco ${vo2} ml/min/kg, RER ${rer}, durata ${dur} min.
-VE/VCO₂ slope ${slope}, O₂ pulse ${o2p}. Soglia anaerobica (AT) ${at} ml/min/kg, BR ${br}%, VE/MVV ${vemvv}%.
-EqO₂ ${eqo2}, EqCO₂ ${eqco2}, PETCO₂ al AT ${pet} mmHg, OUES ${oues}.
-${spiroSummaryShort()}
-Interpretazione descrittiva e neutra basata sul confronto con i predetti e la clinica.`;
-}
-
-// Report buttons
-$('short_rep').addEventListener('click',()=>{ $('report').value = (exam==='watt')?wattShortReport():cpetShortReport(); });
-$('long_rep').addEventListener('click',()=>{ $('report').value = (exam==='watt')?wattLongReport():cpetLongReport(); });
-
-// Bind inputs
-['age','sex','height','weight','ergotype','pa_hours','dx','sp_fev1','sp_fvc','sp_ratio','sp_method'].forEach(id=>{
-  const el=$(id); if(el) el.addEventListener('input', ()=>{ suggestProtocol(); if(exam==='cpet'){ renderSpiroPred(); renderSpiroLMS(); } });
-});
-
-// Init
-setExam(null);
+// PWA
+if('serviceWorker' in navigator){ window.addEventListener('load', ()=>navigator.serviceWorker.register('sw.js')); }
