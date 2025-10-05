@@ -466,6 +466,7 @@ $('step3_next').addEventListener('click',()=>{
     const slope= +$('r_slope').value||NaN, oues= +$('r_oues').value||NaN, vemax= +$('r_vemax').value||NaN;
     const hrrest= +$('r_hrrest').value||NaN, hrmax= +$('r_hrmax').value||NaN, hr1= +$('r_hr1').value||NaN, hr3= +$('r_hr3').value||NaN;
     const rer= +$('r_rer').value||NaN, spo2= +$('r_spo2').value||NaN, borg= +$('r_borg').value||NaN;
+    const dur = +$('r_dur_c').value||NaN;
     const sbp_rest= +$('c_sbp_rest').value||NaN, dbp_rest= +$('c_dbp_rest').value||NaN, sbp= +$('c_sbp').value||NaN, dbp= +$('c_dbp').value||NaN;
     const sbp1= +$('c_sbp1').value||NaN, dbp1= +$('c_dbp1').value||NaN, sbp3= +$('c_sbp3').value||NaN, dbp3= +$('c_dbp3').value||NaN;
     var _cr=$('c_reason'); var _cs=$('c_symptoms'); const reason = (_cr && _cr.value) || ''; const symptoms = (_cs && _cs.value) || '';
