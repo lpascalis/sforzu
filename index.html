@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8"/>
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no"/>
-  <title>Sforzu v5.3 • ErgoLab + Spiro (offline)</title>
+  <title>Sforzu v6 • Wizard Clinico (offline)</title>
   <meta name="theme-color" content="#0b0b0c"/>
   <link rel="manifest" href="manifest.webmanifest"/>
   <link rel="apple-touch-icon" href="icons/icon-192.png"/>
@@ -12,59 +12,101 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
 </head>
 <body>
-<header class="app-header">
-  <h1>Sforzu</h1>
-  <nav class="tabs">
-    <button data-tab="watt" class="active">Watt</button>
-    <button data-tab="spiro">Spiro</button>
-    <button data-tab="cpet">CPET</button>
-    <button data-tab="prognosi">Prognosi</button>
-    <button data-tab="utility">Utility</button>
-    <button data-tab="calib">Calibrazione</button>
-    <button data-tab="info">Info</button>
-  </nav>
-</header>
+<header class="app-header"><h1>Sforzu</h1></header>
 
-<main>
-  <!-- WATT TEST -->
-  <section id="watt" class="tab active">
-    <div class="card">
-      <h2>Protocolli 1-tap</h2>
-      <div class="grid">
-        <label>Modalità
-          <select id="w_mode">
-            <option value="ramp" selected>Rampa</option>
-            <option value="step">A step</option>
-            <option value="constant">Carico costante</option>
-            <option value="monark">Monark (kgf×rpm)</option>
-          </select>
-        </label>
-        <label>Profilo paziente
-          <select id="w_profile">
-            <option>Standard</option>
-            <option>HF</option>
-            <option>BPCO</option>
-            <option>Anziano</option>
-            <option>Atleta</option>
-          </select>
-        </label>
-        <label>Durata target (min)<input type="number" id="w_target" value="10" step="0.5"/></label>
-        <label>VO₂peak atteso (mL/min) <small>(opz.)</small><input type="number" id="w_vo2pk"/></label>
-        <label>Start (W)<input type="number" id="w_start" value="20"/></label>
-        <label>ΔW/min (rampa) o step (W)<input type="number" id="w_inc" value="15"/></label>
-        <label>Durata step (min, se step)<input type="number" id="w_stepmin" value="2"/></label>
-        <label>ΔVO₂/ΔWR (mL/min/W)<input type="number" id="w_gain" value="10" step="0.1"/></label>
-      </div>
-      <div class="row">
-        <button id="w_suggest" class="primary">Suggerisci protocollo</button>
-        <button id="w_adjust" class="secondary">Ricalcola da HR/RPE</button>
-      </div>
-      <div id="w_out" class="results"></div>
+<main id="wizard">
+  <!-- STEP 0 -->
+  <section class="step active" data-step="0">
+    <h2>Cosa vuoi fare?</h2>
+    <div class="chooser">
+      <button class="big" id="choose_watt">🚴 Watt Test</button>
+      <button class="big" id="choose_cpet">🫁 CPET</button>
+    </div>
+  </section>
+
+  <!-- STEP 1 -->
+  <section class="step" data-step="1">
+    <h2>Dati del paziente</h2>
+    <div class="grid">
+      <label>Età (anni)<input type="number" id="age" min="5" max="95"/></label>
+      <label>Sesso
+        <select id="sex"><option value="M">Maschio</option><option value="F">Femmina</option></select>
+      </label>
+      <label>Altezza (cm)<input type="number" id="height" min="80" max="220"/></label>
+      <label>Peso (kg)<input type="number" id="weight" min="15" max="220" step="0.1"/></label>
     </div>
 
-    <div class="card">
-      <h2>kgf ↔ Watt (Monark)</h2>
-      <p class="hint">Formula: W = 6.12 × kgf × rpm (freno a nastro).</p>
+    <details class="card">
+      <summary>Profilo clinico (opzionale)</summary>
+      <div class="tags">
+        <label class="tag"><input type="checkbox" id="p_hf"> Insufficienza cardiaca</label>
+        <label class="tag"><input type="checkbox" id="p_copd"> BPCO</label>
+        <label class="tag"><input type="checkbox" id="p_ob"> Obesità</label>
+        <label class="tag"><input type="checkbox" id="p_elder"> Anziano</label>
+        <label class="tag"><input type="checkbox" id="p_ath"> Atleta</label>
+        <label class="tag"><input type="checkbox" id="p_bb"> Beta-bloccante</label>
+      </div>
+    </details>
+
+    <div id="spiro_block" class="card hidden">
+      <h3>Spirometria pre-test (CPET)</h3>
+      <div class="grid">
+        <label>FVC (L)<input type="number" id="sp_fvc" step="0.01"/></label>
+        <label>FEV₁ (L)<input type="number" id="sp_fev1" step="0.01"/></label>
+        <label>FEV₁/FVC (%)<input type="number" id="sp_ratio" step="0.1" placeholder="auto"/></label>
+        <label>MVV (L/min) <small>(se assente stimata 40×FEV₁)</small><input type="number" id="sp_mvv" step="1"/></label>
+      </div>
+      <details class="card">
+        <summary>Predetti/LLN opzionali</summary>
+        <div class="grid">
+          <label>FVC pred (L)<input type="number" id="sp_fvc_pred" step="0.01"/></label>
+          <label>FEV₁ pred (L)<input type="number" id="sp_fev1_pred" step="0.01"/></label>
+          <label>FEV₁/FVC LLN (%)<input type="number" id="sp_ratio_lln" step="0.1" placeholder="70"/></label>
+        </div>
+      </details>
+      <details class="card">
+        <summary>Mini-wizard predetti (educativo)</summary>
+        <div class="grid">
+          <label>Età (anni)<input type="number" id="wiz_age"/></label>
+          <label>Sesso<select id="wiz_sex"><option value="M">M</option><option value="F">F</option></select></label>
+          <label>Altezza (cm)<input type="number" id="wiz_h"/></label>
+        </div>
+        <div class="row">
+          <button id="wiz_calc" class="secondary">Calcola predetti rapidi</button>
+          <button id="wiz_apply" class="secondary">Applica ai campi</button>
+        </div>
+        <div id="wiz_out" class="results"></div>
+      </details>
+      <div id="spiro_out" class="results"></div>
+    </div>
+
+    <div class="nav">
+      <button id="step1_next" class="primary">Calcola predetti e continua</button>
+    </div>
+    <div id="pred_summary" class="results"></div>
+  </section>
+
+  <!-- STEP 2 -->
+  <section class="step" data-step="2">
+    <h2>Protocollo</h2>
+    <div class="grid">
+      <label>Tipo di prova
+        <select id="proto_type">
+          <option value="ramp">Rampa</option>
+          <option value="step">A step</option>
+          <option value="constant">Carico costante</option>
+          <option value="monark">Monark (kgf×rpm)</option>
+        </select>
+      </label>
+      <label>Durata target (min)<input type="number" id="target_min" value="10" step="0.5"/></label>
+      <label>Start (W)<input type="number" id="start_w" value="20" step="5"/></label>
+      <label>ΔW/min o step (W)<input type="number" id="inc_w" value="15" step="1"/></label>
+      <label>Durata step (min, se step)<input type="number" id="step_min" value="2" step="0.5"/></label>
+      <label>ΔVO₂/ΔWR (mL/min/W)<input type="number" id="gain" value="10" step="0.1"/></label>
+    </div>
+
+    <div class="card" id="monark_block" style="display:none">
+      <h3>Monark kgf ↔ Watt</h3>
       <div class="grid">
         <label>rpm<input type="number" id="m_rpm" value="60"/></label>
         <label>kgf<input type="number" id="m_kgf" value="1.5" step="0.1"/></label>
@@ -77,181 +119,43 @@
       <div id="m_out" class="results"></div>
     </div>
 
-    <div class="card">
-      <h2>ΔVO₂/ΔWR & Efficiency</h2>
-      <p class="hint">ΔVO₂/ΔWR atteso ≈ 10 mL·min⁻¹·W⁻¹. Gross efficiency ≈ (WR×6000)/(VO₂×20.9).</p>
-      <textarea id="effData" placeholder="W, VO2_mLmin (steady)
-50, 800
-100, 1300
-150, 1800
-200, 2300"></textarea>
-      <div class="row">
-        <button id="effBtn" class="primary">Calcola</button>
-      </div>
-      <div id="effOut" class="results"></div>
-    </div>
-
-    <div class="card">
-      <h2>Critical Power (CP) — 2 prove</h2>
-      <p class="hint">Inserisci due prove a carichi diversi con tempo a esaurimento (TTE). 2-parametri: CP & W′.</p>
-      <div class="grid">
-        <label>Prova 1 — Potenza (W)<input type="number" id="cp_w1"/></label>
-        <label>Prova 1 — Tempo a esaurimento (s)<input type="number" id="cp_t1"/></label>
-        <label>Prova 2 — Potenza (W)<input type="number" id="cp_w2"/></label>
-        <label>Prova 2 — Tempo a esaurimento (s)<input type="number" id="cp_t2"/></label>
-      </div>
-      <button id="cp_calc">Stima CP & W′</button>
-      <div id="cp_out" class="results"></div>
-    </div>
-
-    <div class="card">
-      <h2>Safety & Checklist</h2>
-      <p class="hint">Soglie conservative: PA, SpO₂, HR, RPE. Solo flag, nessuna azione automatica.</p>
-      <div class="grid">
-        <label>PA sistolica (mmHg)<input type="number" id="sf_sys"/></label>
-        <label>SpO₂ (%)<input type="number" id="sf_spo2"/></label>
-        <label>HR (bpm)<input type="number" id="sf_hr"/></label>
-        <label>RPE Borg 6–20<input type="number" id="sf_rpe"/></label>
-      </div>
-      <button id="sf_check" class="secondary">Valuta</button>
-      <div id="sf_out" class="results"></div>
+    <div id="proto_out" class="results"></div>
+    <div class="nav">
+      <button class="secondary" id="back_to_1">Indietro</button>
+      <button class="primary" id="step2_next">Avvia test</button>
     </div>
   </section>
 
-  <!-- SPIRO -->
-  <section id="spiro" class="tab">
-    <div class="card">
-      <h2>Spirometria pre-test</h2>
-      <div class="grid">
-        <label>FVC (L)<input type="number" id="sp_fvc" step="0.01"/></label>
-        <label>FEV₁ (L)<input type="number" id="sp_fev1" step="0.01"/></label>
-        <label>FEV₁/FVC (%)<input type="number" id="sp_ratio" step="0.1" placeholder="auto"/></label>
-        <label>MVV misurata (L/min) <small>(opz.)</small><input type="number" id="sp_mvv" step="1"/></label>
-      </div>
-      <details class="card" open>
-        <summary>Predetti/LLN (opzionali)</summary>
-        <div class="grid">
-          <label>FVC pred (L)<input type="number" id="sp_fvc_pred" step="0.01"/></label>
-          <label>FEV₁ pred (L)<input type="number" id="sp_fev1_pred" step="0.01"/></label>
-          <label>FEV₁/FVC LLN (%)<input type="number" id="sp_ratio_lln" step="0.1" placeholder="70"/></label>
-        </div>
-        <p class="hint">Se non conosci LLN, usa il cut-off clinico 70% post-broncodilatatore.</p>
-      </details>
-        <div class="card" style="margin-top:10px">
-          <h3>Mini wizard predetti (approssimati)</h3>
-          <p class="hint">Stima educativa di FEV₁ e FVC da età/sesso/altezza. Non sostituisce GLI ufficiali.</p>
-          <div class="grid">
-            <label>Età (anni)<input type="number" id="wiz_age" value="50"/></label>
-            <label>Sesso<select id="wiz_sex"><option value="M">M</option><option value="F">F</option></select></label>
-            <label>Altezza (cm)<input type="number" id="wiz_h" value="170"/></label>
-          </div>
-          <div class="row">
-            <button id="wiz_calc" class="secondary">Calcola predetti rapidi</button>
-            <button id="wiz_apply" class="secondary">Invia nei campi predetti</button>
-          </div>
-          <div id="wiz_out" class="results"></div>
-        </div>
-
-      <div class="row">
-        <button id="sp_calc" class="primary">Calcola & interpreta</button>
-        <button id="sp_to_cpet" class="secondary">Invia a CPET</button>
-      </div>
-      <div id="sp_out" class="results"></div>
+  <!-- STEP 3 -->
+  <section class="step" data-step="3">
+    <h2>Risultati misurati</h2>
+    <div class="grid">
+      <label>VO₂ peak (mL/min)<input type="number" id="r_vo2pk"/></label>
+      <label>VO₂/kg (mL·kg⁻¹·min⁻¹)<input type="number" id="r_vo2kg"/></label>
+      <label>VE/VCO₂ slope<input type="number" id="r_slope"/></label>
+      <label>OUES<input type="number" id="r_oues" step="0.01"/></label>
+      <label>VEmax (L/min)<input type="number" id="r_vemax"/></label>
+      <label>HRmax (bpm)<input type="number" id="r_hrmax"/></label>
+      <label>HRR 1′ (bpm)<input type="number" id="r_hrr"/></label>
+      <label>RER max<input type="number" id="r_rer" step="0.01"/></label>
+      <label>SpO₂ nadir (%)<input type="number" id="r_spo2"/></label>
+      <label>Borg max (6–20)<input type="number" id="r_borg"/></label>
+    </div>
+    <div class="nav">
+      <button class="secondary" id="back_to_2">Indietro</button>
+      <button class="primary" id="step3_next">Analizza risultati</button>
     </div>
   </section>
 
-  <!-- CPET -->
-  <section id="cpet" class="tab">
-    <div class="card">
-      <h2>Calcolatori rapidi</h2>
-      <p class="hint">BR% = 100×(1 − VEmax/(40×FEV₁)). Se VEmax sconosciuto, usa fallback 0.8×MVV.</p>
-      <div class="grid">
-        <label>VO₂peak (mL/min)<input type="number" id="c_vo2peak"/></label>
-        <label>VO₂/kg (mL·kg⁻¹·min⁻¹)<input type="number" id="c_vo2kg"/></label>
-        <label>VE/VCO₂ slope<input type="number" id="c_slope"/></label>
-        <label>OUES<input type="number" id="c_oues"/></label>
-        <label>HRpeak (bpm)<input type="number" id="c_hr"/></label>
-        <label>FEV₁ (L)<input type="number" id="c_fev1" step="0.01"/></label>
-      </div>
-      <button id="c_calc" class="primary">Calcola BR% & badge</button>
-      <div id="c_out" class="results"></div>
-    </div>
-  </section>
-
-  <!-- PROGNOSI -->
-  <section id="prognosi" class="tab">
-    <div class="card">
-      <h2>Indice prognostico (educational)</h2>
-      <div class="grid">
-        <label>VO₂/kg peak<input type="number" id="pr_vo2kg"/></label>
-        <label>VE/VCO₂ slope<input type="number" id="pr_slope"/></label>
-        <label>HRR 1' (bpm)<input type="number" id="pr_hrr"/></label>
-      </div>
-      <button id="pr_calc" class="primary">Calcola</button>
-      <div id="pr_out" class="results"></div>
-    </div>
-  </section>
-
-  <!-- UTILITY -->
-  <section id="utility" class="tab">
-    <div class="card">
-      <h2>Convertitori</h2>
-      <div class="grid">
-        <label>T (°C)<input type="number" id="u_T" value="22"/></label>
-        <label>Pb (mmHg)<input type="number" id="u_Pb" value="760"/></label>
-        <label>RH (%)<input type="number" id="u_RH" value="50"/></label>
-      </div>
-      <button id="toSTPD">BTPS→STPD</button>
-      <button id="toBTPS">STPD→BTPS</button>
-      <div id="u_out" class="results"></div>
-    </div>
-
-    <div class="card">
-      <h2>Export/Import locale</h2>
-      <div class="row">
-        <button id="exp_json" class="secondary">Esporta JSON</button>
-        <label>Importa JSON<input type="file" id="imp_json" accept="application/json"/></label>
-      </div>
-      <div id="persist_out" class="results"></div>
-    </div>
-  </section>
-
-  <!-- CALIBRAZIONE -->
-  <section id="calib" class="tab">
-    <div class="card">
-      <h2>Diario calibrazione ergometro</h2>
-      <div class="grid">
-        <label>Data<input type="date" id="cl_date"/></label>
-        <label>Operatore<input type="text" id="cl_op"/></label>
-        <label>Note<input type="text" id="cl_note" placeholder="es. catena ingrassata, kgf verificati"/></label>
-      </div>
-      <div class="row">
-        <button id="cl_add" class="primary">Aggiungi</button>
-        <button id="cl_clear" class="secondary">Pulisci</button>
-      </div>
-      <div id="cl_out" class="results"></div>
-    </div>
-  </section>
-
-  <!-- INFO -->
-  <section id="info" class="tab">
-    <div class="card">
-      <h2>Pocket guide & Fonti</h2>
-      <ul class="bullets">
-        <li>Durata target rampa: 8–12′; ΔVO₂/ΔWR ≈ 10 mL·min⁻¹·W⁻¹.</li>
-        <li>Gross efficiency ≈ WR×6000/(VO₂×20.9); CP/W′ da 2 TTE (modello 2-parametri).</li>
-        <li>BR% ≈ 100×(1 − VEmax/(FEV1×40)).</li>
-        <li>Cut-off colore: uso formativo; adattare a contesto clinico.</li>
-        <li><b>Fonti consigliate</b>: manualistica di riferimento CPET/ergometria, linee guida ATS/ACCP 2003, letteratura su VE/VCO₂ slope, OUES, HRR, ventilazione oscillatoria.</li>
-      </ul>
-    </div>
+  <!-- STEP 4 -->
+  <section class="step" data-step="4">
+    <h2>Interpretazione</h2>
+    <div id="report" class="report"></div>
+    <div class="nav"><button class="primary" id="restart">Nuovo test</button></div>
   </section>
 </main>
 
-<footer class="app-footer">
-  <span>© Sforzu</span>
-  <button id="installBtn" hidden>Aggiungi a Home</button>
-</footer>
+<footer class="app-footer"><button id="installBtn" hidden>Aggiungi a Home</button></footer>
 <script src="app.js"></script>
 </body>
 </html>
