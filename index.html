@@ -161,9 +161,11 @@
         <div class="grid">
           <label>FEV₁ misurato (L)<input type="number" id="sp_fev1" value="2.8" step="0.01"></label>
           <label>FVC misurato (L)<input type="number" id="sp_fvc" value="3.6" step="0.01"></label>
-          <label>Rapporto FEV₁/FVC (%)<input type="number" id="sp_ratio" value="78" step="0.1"></label>
+          <label>Rapporto FEV₁/FVC (%) <small class="note">🧮 calcolato automaticamente da FEV₁ e FVC (editabile)</small>
+            <input type="number" id="sp_ratio" value="77.8" step="0.1">
+          </label>
         </div>
-        <div class="hint mt">Predetti basati su GLI 2012 semplificati (percentuali e LLN approssimate). Nessun salvataggio.</div>
+        <div class="hint mt">Predetti GLI (approssimati, senza spline) integrati: %pred, Z-score e pattern.</div>
       </details>
 
       <div class="grid2 mt">

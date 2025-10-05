@@ -2,9 +2,12 @@ const $ = s=>document.querySelector(s);
 const show = id => { document.querySelectorAll('section.card').forEach(s=>s.classList.add('hidden')); $(id).classList.remove('hidden'); window.scrollTo(0,0); };
 document.addEventListener('click', e=>{ const go=e.target.getAttribute('data-go'); if(go){ e.preventDefault(); show('#'+go);} });
 window.addEventListener('load',()=>{ if('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js'); });
-
-// Toggle spirometry block
 $('#cpet_spiro').addEventListener('change',()=>{ if($('#cpet_spiro').value==='si') $('#spiro_block').classList.remove('hidden'); else $('#spiro_block').classList.add('hidden'); });
+
+// Utils
+function hrMax(age, formula){ return (formula==='tanaka') ? (208 - 0.7*age) : (220 - age); }
+function badge(text, status){ const cls=status==='ok'?'ok':status==='warn'?'warn':'risk'; return `<span class="badge ${cls}">${text}</span>`; }
+function clamp(v,min,max){ return Math.max(min, Math.min(max, v)); }
 
 // Protocol suggestions
 function suggestProtocol(modality, profile, hours){
@@ -35,9 +38,8 @@ function suggestProtocol(modality, profile, hours){
   }
   return {startW, ramp, note, target:10};
 }
-function hrMax(age, formula){ return (formula==='tanaka') ? (208 - 0.7*age) : (220 - age); }
-function badge(text, status){ const cls=status==='ok'?'ok':status==='warn'?'warn':'risk'; return `<span class="badge ${cls}">${text}</span>`; }
 
+// WATT TEST
 document.addEventListener('click', (e)=>{
   if(e.target && e.target.id==='btnSuggestWT'){
     const s = suggestProtocol($('#wt_modality').value,$('#wt_profile').value,+$('#wt_hours').value);
@@ -131,7 +133,36 @@ function calcWattTest(){
   $('#wt_results').classList.remove('hidden');
 }
 
+// ---------- CPET with predictions ----------
+function vo2Pred(age, sex, modality){
+  // Simple approximation: treadmill ~10% > cycle
+  let base = (sex==='M') ? (60 - 0.55*age) : (48 - 0.37*age);
+  if (modality==='cycle') base *= 0.90;
+  return clamp(base, 10, 70);
+}
+
+// Auto-calc FEV1/FVC% when spirometry is shown
+function autoRatio(){
+  const fev1 = parseFloat($('#sp_fev1').value || '0');
+  const fvc = parseFloat($('#sp_fvc').value || '0');
+  if(fev1>0 && fvc>0){
+    const r = (fev1/fvc)*100;
+    $('#sp_ratio').value = r.toFixed(1);
+  }
+}
+['input','change'].forEach(ev=>{
+  document.addEventListener(ev, (e)=>{
+    if(!$('#spiro_block').classList.contains('hidden')){
+      if(e.target && (e.target.id==='sp_fev1' || e.target.id==='sp_fvc')) autoRatio();
+    }
+  });
+});
+
 function calcCPET(){
+  const mod = $('#cpet_modality').value;
+  const age = +$('#c_age').value;
+  const sex = $('#c_sex').value;
+
   const vo2pk = +$('#c_vo2pk').value;
   const at = +$('#c_at').value;
   const vevco2 = +$('#c_vevco2').value;
@@ -143,17 +174,27 @@ function calcCPET(){
   const hrpk = +$('#c_hrpk').value;
   const sbp = +$('#c_sbp').value;
 
+  // Predetti
+  const vo2_pred = vo2Pred(age, sex, mod);
+  const vo2_pct = 100*vo2pk/vo2_pred;
+  const at_pct_vo2pred = 100*at/vo2_pred;
+  const at_pct_vo2pk = 100*at/Math.max(1,vo2pk);
+
   const badges = {
     vevco2: vevco2<30 ? badge('normale','ok') : vevco2<36 ? badge('intermedio','warn') : badge('elevato','risk'),
     rer: rer>=1.10 ? badge('massimale','ok') : badge('non massimale','warn'),
-    at: (at/vo2pk)>=0.40 ? badge('adeguato','ok') : badge('basso','warn')
+    at: (at_pct_vo2pk)>=40 ? badge('adeguato','ok') : badge('basso','warn'),
+    vo2: vo2_pct>=85 ? badge('≥85% pred','ok') : vo2_pct>=60 ? badge('60–84%','warn') : badge('<60%','risk')
   };
 
   let html = `
     <h3>Risultati CPET</h3>
     <div class="kv">
-      <div><span>VO₂ picco</span><strong>${vo2pk.toFixed(1)} ml/kg/min</strong></div>
-      <div><span>AT</span><strong>${at.toFixed(1)} ml/kg/min ${badges.at}</strong></div>
+      <div><span>VO₂ picco</span><strong>${vo2pk.toFixed(1)} ml/kg/min (${vo2_pct.toFixed(0)}% pred) ${badges.vo2}</strong></div>
+      <div><span>VO₂ predetto</span><strong>${vo2_pred.toFixed(1)} ml/kg/min</strong></div>
+      <div><span>AT assoluto</span><strong>${at.toFixed(1)} ml/kg/min</strong></div>
+      <div><span>AT / VO₂ picco</span><strong>${at_pct_vo2pk.toFixed(0)}% ${badges.at}</strong></div>
+      <div><span>AT / VO₂ pred</span><strong>${at_pct_vo2pred.toFixed(0)}%</strong></div>
       <div><span>VE/VCO₂ slope</span><strong>${vevco2.toFixed(1)} ${badges.vevco2}</strong></div>
       <div><span>OUES</span><strong>${oues.toFixed(1)}</strong></div>
       <div><span>EqO₂</span><strong>${eqo2.toFixed(1)}</strong></div>
@@ -164,32 +205,76 @@ function calcCPET(){
       <div><span>PAS picco</span><strong>${sbp} mmHg</strong></div>
     </div>
   `;
+
   const concl = [];
-  if (rer<1.10) concl.push('Test non pienamente massimale (RER<1.10)');
+  if (vo2_pct<85) concl.push('VO₂ picco <85% del predetto');
   if (vevco2>=36) concl.push('Inefficienza ventilatoria (VE/VCO₂ elevato)');
-  if ((at/vo2pk)<0.40) concl.push('AT basso in % del VO₂ picco');
-  if (concl.length===0) concl.push('CPET nei limiti principali con buona risposta cardiorespiratoria');
+  if (rer<1.10) concl.push('Test non pienamente massimale (RER<1.10)');
+  if (at_pct_vo2pk<40) concl.push('AT basso rispetto al VO₂ picco');
+  if (concl.length===0) concl.push('Risposta cardiorespiratoria complessivamente nei limiti');
   html += `<h4 class="mt">Conclusione</h4><div class="hint">${concl.join(' · ')}</div>`;
 
-  // Optional spirometry quick check
+  // ---------- Spirometria opzionale (GLI-like simplified) ----------
   if($('#cpet_spiro').value==='si'){
-    const age=+$('#c_age').value, sex=$('#c_sex').value, h=+$('#c_height').value/100;
-    const fev1=+$('#sp_fev1').value, fvc=+$('#sp_fvc').value, ratio=+$('#sp_ratio').value;
-    // Simple GLI-like predicted (very simplified, for placeholder)
-    const predFEV1 = (sex==='M' ? 0.0414 : 0.0342)*h*100 + (sex==='M'?2.190:1.578) - 0.03*age;
-    const predFVC  = (sex==='M' ? 0.0550 : 0.0425)*h*100 + (sex==='M'?1.850:1.350) - 0.025*age;
-    const predRatio = sex==='M'?78:80;
+    const h_m = +$('#c_height').value/100;
+    const age = +$('#c_age').value;
+    const sex = $('#c_sex').value;
+    const fev1 = +$('#sp_fev1').value;
+    const fvc = +$('#sp_fvc').value;
+    const ratio = +$('#sp_ratio').value;
+
+    const lnH = Math.log(h_m);
+    const lnA = Math.log(age);
+    let a_fev1, b_fev1, c_fev1, a_fvc, b_fvc, c_fvc, a_ratio, b_ratio, c_ratio;
+    if (sex==='F'){
+      a_fev1=-10.901689; b_fev1=2.385928; c_fev1=-0.076386;
+      a_fvc=-12.055901;  b_fvc=2.621579;  c_fvc=-0.035975;
+      a_ratio=0.9189568; b_ratio=-0.1840671; c_ratio=-0.0461306;
+    } else {
+      a_fev1=-11.399108; b_fev1=2.462664; c_fev1=-0.011394;
+      a_fvc=-12.629131;  b_fvc=2.727421;  c_fvc=0.009174;
+      a_ratio=1.022608;  b_ratio=-0.218592; c_ratio=-0.027586;
+    }
+    const predFEV1 = Math.exp(a_fev1 + b_fev1*Math.log(h_m) + c_fev1*Math.log(age));
+    const predFVC  = Math.exp(a_fvc  + b_fvc *Math.log(h_m) + c_fvc *Math.log(age));
+    const predRatio= 100*Math.exp(a_ratio + b_ratio*Math.log(h_m) + c_ratio*Math.log(age));
+
     const pctFEV1 = 100*fev1/Math.max(0.1,predFEV1);
-    const pctFVC = 100*fvc/Math.max(0.1,predFVC);
-    const pctRatio = 100*(ratio/Math.max(1,predRatio));
-    const ratioLLN = sex==='M'?70:71;
+    const pctFVC  = 100*fvc /Math.max(0.1,predFVC);
+    const pctRatio= 100*(ratio/Math.max(1,predRatio));
+
+    let L_fev1, L_fvc, L_ratio, alpha_fev1, beta_fev1, alpha_fvc, beta_fvc, alpha_ratio, beta_ratio;
+    if (sex==='F'){
+      L_fev1=1.21388; L_fvc=0.899; L_ratio=(6.6490 - 0.9920*Math.log(age));
+      alpha_fev1=-2.364047; beta_fev1=0.129402;
+      alpha_fvc=-2.310148;  beta_fvc=0.120428;
+      alpha_ratio=-3.171582; beta_ratio=0.144358;
+    } else {
+      L_fev1=1.22703; L_fvc=0.9346; L_ratio=(3.8243 - 0.3328*Math.log(age));
+      alpha_fev1=-2.256278; beta_fev1=0.080729;
+      alpha_fvc=-2.195595;  beta_fvc=0.068466;
+      alpha_ratio=-2.882025; beta_ratio=0.068889;
+    }
+    const S_fev1 = Math.exp(alpha_fev1 + beta_fev1*Math.log(age));
+    const S_fvc  = Math.exp(alpha_fvc  + beta_fvc *Math.log(age));
+    const S_ratio= Math.exp(alpha_ratio + beta_ratio*Math.log(age));
+    function zscore(meas, L, M, S){ return ((Math.pow(meas/M, L) - 1)/(L*S)); }
+    const zFEV1 = zscore(fev1, L_fev1, predFEV1, S_fev1);
+    const zFVC  = zscore(fvc,  L_fvc,  predFVC,  S_fvc);
+    const zRATIO= zscore(ratio/100, L_ratio, predRatio/100, S_ratio);
+
+    const ratioLLNflag = zRATIO < -1.645;
+    const pattern = ratioLLNflag ? (pctFVC<80 ? 'Ostruttivo + restrizione sospetta' : 'Ostruttivo') : (pctFVC<80 ? 'Restrittivo (sospetto)' : 'Normale');
+
     html += `
-      <h4 class="mt">Spirometria (check rapido)</h4>
+      <h4 class="mt">Spirometria (predetti & Z-score)</h4>
       <div class="kv">
-        <div><span>FEV₁ % pred</span><strong>${pctFEV1.toFixed(0)}%</strong></div>
-        <div><span>FVC % pred</span><strong>${pctFVC.toFixed(0)}%</strong></div>
-        <div><span>FEV₁/FVC</span><strong>${ratio.toFixed(0)}% ${ratio<ratioLLN?badge('sotto LLN','risk'):badge('nella norma','ok')}</strong></div>
-      </div>`;
+        <div><span>FEV₁</span><strong>${fev1.toFixed(2)} L · ${pctFEV1.toFixed(0)}% pred · Z ${zFEV1.toFixed(2)} ${zFEV1<-1.645?badge('basso','risk'):badge('OK','ok')}</strong></div>
+        <div><span>FVC</span><strong>${fvc.toFixed(2)} L · ${pctFVC.toFixed(0)}% pred · Z ${zFVC.toFixed(2)} ${zFVC<-1.645?badge('basso','risk'):badge('OK','ok')}</strong></div>
+        <div><span>FEV₁/FVC</span><strong>${ratio.toFixed(1)}% · Z ${zRATIO.toFixed(2)} ${ratioLLNflag?badge('sotto LLN','risk'):badge('OK','ok')}</strong></div>
+        <div><span>Pattern</span><strong>${pattern}</strong></div>
+      </div>
+    `;
   }
 
   $('#cpet_results').innerHTML = html;
