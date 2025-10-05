@@ -15,7 +15,7 @@ function goto(step){
   var _steps=document.querySelectorAll('.step'); for(var i=0;i<_steps.length;i++){ _steps[i].classList.remove('active'); }
   const el=document.querySelector(`.step[data-step="${step}"]`); if(el){el.classList.add('active'); window.scrollTo({top:0,behavior:'smooth'});}
   if(step==='0a') refreshDeviceStep();
-  if(step===1){ showStep1ForMode(); setTimeout(renderSpiroPred, 20);}
+  if(step===1){ showStep1ForMode(); setTimeout(function(){renderSpiroPred(); renderSpiroLMS();}, 20);}
   if(step===2) refreshProtocol();
   if(step===3) showStep3ForMode();
 }
@@ -159,7 +159,7 @@ $('step1_next').addEventListener('click',()=>{
       SUGG.treadmill={proto, target:t, speed0, grade0, ds, dg, stepmin, rationale:note, title};
       $('proto_sug_text').innerHTML = `<p><b>Treadmill</b> — ${title}: start ${speed0} km/h @ ${grade0}%, step ${stepmin}′, +${ds} km/h & +${dg}%/step, target ${t} min.<br><span class="hint">${note}</span></p>`;
     }
-    $('proto_suggestion').classList.remove('hidden'); renderSpiroPred();
+    $('proto_suggestion').classList.remove('hidden'); renderSpiroPred(); renderSpiroLMS();
     goto(2);
   }catch(e){ $('pred_summary').innerHTML=`<p style="color:#ff8a8a">⚠️ ${e.message}</p>`; }
 });
@@ -366,6 +366,7 @@ Conclusioni: quadro ${eff}${isFinite(slope)? (slope>=40? ' con inefficienza vent
 /* STEP 3 → Analyze + build both reports */
 $('step3_next').addEventListener('click',()=>{
   try{
+    var dur = NaN;
     const ps=document.getElementById('pred_summary').innerText.match(/VO₂ ≈ (\d+) mL\/min \(([\d\.]+) mL·kg⁻¹·min⁻¹; <b>([\d\.]+) METs<\/b>\)/);
     const vo2_pred= ps? +ps[1] : NaN;
     const vo2kg_pred= ps? +ps[2] : NaN;
@@ -466,7 +467,7 @@ $('step3_next').addEventListener('click',()=>{
     const slope= +$('r_slope').value||NaN, oues= +$('r_oues').value||NaN, vemax= +$('r_vemax').value||NaN;
     const hrrest= +$('r_hrrest').value||NaN, hrmax= +$('r_hrmax').value||NaN, hr1= +$('r_hr1').value||NaN, hr3= +$('r_hr3').value||NaN;
     const rer= +$('r_rer').value||NaN, spo2= +$('r_spo2').value||NaN, borg= +$('r_borg').value||NaN;
-    const dur = +$('r_dur_c').value||NaN;
+    dur = +$('r_dur_c').value||NaN; const _dur_local = dur;
     const sbp_rest= +$('c_sbp_rest').value||NaN, dbp_rest= +$('c_dbp_rest').value||NaN, sbp= +$('c_sbp').value||NaN, dbp= +$('c_dbp').value||NaN;
     const sbp1= +$('c_sbp1').value||NaN, dbp1= +$('c_dbp1').value||NaN, sbp3= +$('c_sbp3').value||NaN, dbp3= +$('c_dbp3').value||NaN;
     var _cr=$('c_reason'); var _cs=$('c_symptoms'); const reason = (_cr && _cr.value) || ''; const symptoms = (_cs && _cs.value) || '';
@@ -531,7 +532,7 @@ $('step3_next').addEventListener('click',()=>{
         const FEV1= +$('sp_fev1').value, FVC= +$('sp_fvc').value; let ratio= +$('sp_ratio').value;
         if(!isFinite(ratio)&&isFinite(FEV1)&&isFinite(FVC)&&FVC>0) ratio=100*FEV1/FVC;
         if(!isFinite(FEV1)&&!isFinite(FVC)) return '';
-        var age= +$('age').value||NaN, sex=$('sex').value, h= +$('height').value||NaN; var pred=quickPred(age,sex,h); var p1=pred.fev1, p2=pred.fvc; var pct1=(isFinite(FEV1)&&isFinite(p1)&&p1>0)? Math.round(100*FEV1/p1):NaN; var pct2=(isFinite(FVC)&&isFinite(p2)&&p2>0)? Math.round(100*FVC/p2):NaN; return `FEV₁ ${isFinite(FEV1)?FEV1.toFixed(2)+' L':'n.d.'}${isFinite(pct1)?' ('+pct1+'%)':''}, FVC ${isFinite(FVC)?FVC.toFixed(2)+' L':'n.d.'}${isFinite(pct2)?' ('+pct2+'%)':''}, rapporto ${isFinite(ratio)?ratio.toFixed(1)+'%':'n.d.'}.`;
+        var age= +$('age').value||NaN, sex=$('sex').value, h= +$('height').value||NaN; var pred=quickPred(age,sex,h); var p1=pred.fev1, p2=pred.fvc; var pct1=(isFinite(FEV1)&&isFinite(p1)&&p1>0)? Math.round(100*FEV1/p1):NaN; var pct2=(isFinite(FVC)&&isFinite(p2)&&p2>0)? Math.round(100*FVC/p2):NaN; var pack=lms_rn_predict(+$('age').value||NaN,$('sex').value,+$('height').value||NaN); var z1=z_from_LMS(FEV1,pack.L_FEV1,pack.FEV1_pred,pack.S_FEV1); var z2=z_from_LMS(FVC,pack.L_FVC,pack.FVC_pred,pack.S_FVC); var zR=z_from_LMS(ratio,pack.L_RAT,pack.RAT_pred*100,pack.S_RAT); return `FEV₁ ${isFinite(FEV1)?FEV1.toFixed(2)+' L':'n.d.'}${isFinite(pct1)?' ('+pct1+'%)':''}${isFinite(z1)?' [z '+z1.toFixed(2)+']':''}, FVC ${isFinite(FVC)?FVC.toFixed(2)+' L':'n.d.'}${isFinite(pct2)?' ('+pct2+'%)':''}${isFinite(z2)?' [z '+z2.toFixed(2)+']':''}, rapporto ${isFinite(ratio)?ratio.toFixed(1)+'%':'n.d.'}${isFinite(zR)?' [z '+zR.toFixed(2)+']':''}.`;
       })(),
       hrrest, sbp_rest, dbp_rest, vo2kg, vo2kg_pred, vo2kg_pct, vo2: vo2pk, rer, slope, br:BR, oues, vemax,
       dur, reason, symptoms, borg, hrmax, hr_pct, sbp, dbp, dSBP, hrr1, hrr3

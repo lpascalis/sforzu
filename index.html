@@ -86,6 +86,20 @@
           <label>FEV₁/FVC LLN (%)<input type="number" id="sp_ratio_lln" step="0.1" placeholder="70"/></label>
         </div>
       </details>
+      
+      <div class="field-row">
+        <label>Metodo predetti
+          <select id="sp_method">
+            <option value="lms_rn" selected>Predetti avanzati (LMS, race-neutral integrato)</option>
+            <option value="quick">Stima rapida (semplice)</option>
+          </select>
+        </label>
+      </div>
+      <div class="results" id="sp_lms_box">
+        <b>LMS e Z-score:</b>
+        <div id="sp_lms_text" class="hint">Verranno calcolati L, M (predetto), S e Z-score per FEV₁, FVC e FEV₁/FVC.</div>
+      </div>
+
       <div class="results" id="sp_pred_box">
         <b>Predetti spirometrici (stima):</b>
         <div id="sp_pred_text" class="hint">Inserisci età, sesso, altezza e (opz.) FEV₁/FVC per vedere predetti e %.</div>
