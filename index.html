@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8"/>
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no"/>
-  <title>Sforzu v6 • Wizard Clinico (offline)</title>
+  <title>Sforzu v6.6 • Wizard Clinico (offline)</title>
   <meta name="theme-color" content="#0b0b0c"/>
   <link rel="manifest" href="manifest.webmanifest"/>
   <link rel="apple-touch-icon" href="icons/icon-192.png"/>
@@ -24,6 +24,16 @@
     </div>
   </section>
 
+  <!-- STEP 0a: DEVICE -->
+  <section class="step" data-step="0a">
+    <h2>Seleziona l’ergometro</h2>
+    <p id="device_note" class="hint"></p>
+    <div class="chooser">
+      <button class="big" id="choose_cycle">🚴‍♂️ Cicloergometro</button>
+      <button class="big" id="choose_treadmill">🏃 Treadmill</button>
+    </div>
+  </section>
+
   <!-- STEP 1 -->
   <section class="step" data-step="1">
     <h2>Dati del paziente</h2>
@@ -34,11 +44,13 @@
       </label>
       <label>Altezza (cm)<input type="number" id="height" min="80" max="220"/></label>
       <label>Peso (kg)<input type="number" id="weight" min="15" max="220" step="0.1"/></label>
+      <label>Attività fisica (ore/settimana)<input type="number" id="train_h" min="0" max="30" step="0.5"/></label>
     </div>
 
     <details class="card">
       <summary>Profilo clinico (opzionale)</summary>
       <div class="tags">
+        <label class="tag"><input type="checkbox" id="p_ihd"> Cardiopatia ischemica</label>
         <label class="tag"><input type="checkbox" id="p_hf"> Insufficienza cardiaca</label>
         <label class="tag"><input type="checkbox" id="p_copd"> BPCO</label>
         <label class="tag"><input type="checkbox" id="p_ob"> Obesità</label>
@@ -49,7 +61,7 @@
     </details>
 
     <div id="spiro_block" class="card hidden">
-      <h3>Spirometria pre-test (CPET)</h3>
+      <h3>Spirometria pre-test (solo CPET)</h3>
       <div class="grid">
         <label>FVC (L)<input type="number" id="sp_fvc" step="0.01"/></label>
         <label>FEV₁ (L)<input type="number" id="sp_fev1" step="0.01"/></label>
@@ -81,15 +93,25 @@
     </div>
 
     <div class="nav">
-      <button id="step1_next" class="primary">Calcola predetti e continua</button>
+      <button id="step1_next" class="primary">Calcola predetti e suggerisci protocollo</button>
     </div>
     <div id="pred_summary" class="results"></div>
+
+    <div id="proto_suggestion" class="card hidden">
+      <h3>Suggerimento protocollo</h3>
+      <div id="proto_sug_text" class="results"></div>
+      <div class="row">
+        <button id="copy_suggestion" class="secondary">Copia nello Step 2</button>
+      </div>
+    </div>
   </section>
 
   <!-- STEP 2 -->
   <section class="step" data-step="2">
     <h2>Protocollo</h2>
-    <div class="grid">
+
+    <!-- Cycle block -->
+    <div id="cycle_block" class="grid">
       <label>Tipo di prova
         <select id="proto_type">
           <option value="ramp">Rampa</option>
@@ -103,6 +125,34 @@
       <label>ΔW/min o step (W)<input type="number" id="inc_w" value="15" step="1"/></label>
       <label>Durata step (min, se step)<input type="number" id="step_min" value="2" step="0.5"/></label>
       <label>ΔVO₂/ΔWR (mL/min/W)<input type="number" id="gain" value="10" step="0.1"/></label>
+    </div>
+
+    <!-- Treadmill block -->
+    <div id="tm_block" class="grid hidden">
+      <label>Protocollo treadmill
+        <select id="tm_proto">
+          <option value="ramp_tm">Rampa personalizzata</option>
+          <option value="mod_bruce">Modified Bruce (suggerito)</option>
+          <option value="bruce">Bruce</option>
+          <option value="naughton">Naughton</option>
+          <option value="balke">Balke</option>
+        </select>
+      </label>
+      <label>Durata target (min)<input type="number" id="tm_target" value="10" step="0.5"/></label>
+      <label>Velocità start (km/h)<input type="number" id="tm_speed0" value="3.0" step="0.1"/></label>
+      <label>Pendenza start (%)<input type="number" id="tm_grade0" value="0" step="0.5"/></label>
+      <label>Δ velocità per step (km/h)<input type="number" id="tm_dspeed" value="0.2" step="0.1"/></label>
+      <label>Δ pendenza per step (%)<input type="number" id="tm_dgrade" value="1" step="0.5"/></label>
+      <label>Durata step (min)<input type="number" id="tm_stepmin" value="1" step="0.5"/></label>
+    </div>
+
+    <!-- Treadmill METs preview -->
+    <div id="tm_mets_card" class="card hidden">
+      <h3>Stima METs treadmill (preview)</h3>
+      <div id="tm_mets_out" class="results"></div>
+      <div class="row">
+        <button id="tm_copy_to_cpet" class="secondary">Usa come stima VO₂/kg in CPET</button>
+      </div>
     </div>
 
     <div class="card" id="monark_block" style="display:none">
@@ -129,20 +179,84 @@
   <!-- STEP 3 -->
   <section class="step" data-step="3">
     <h2>Risultati misurati</h2>
-    <div class="grid">
+
+    <div class="card">
+      <label>Formula FC max predetta
+        <select id="hrmax_formula">
+          <option value="fox">Fox: 220 − età</option>
+          <option value="tanaka">Tanaka: 208 − 0.7×età</option>
+        </select>
+      </label>
+    </div>
+
+    <!-- WATT TEST fields -->
+    <div id="watt_fields" class="grid hidden">
+      <label>Watt di picco (W)<input type="number" id="r_wpeak"/></label>
+      <label>W/kg di picco<input type="number" id="r_wkg" placeholder="auto" step="0.01"/></label>
+      <label>Durata prova (min)<input type="number" id="r_dur" step="0.1"/></label>
+
+      <label>FC riposo (bpm)<input type="number" id="r_hrrest_w"/></label>
+      <label>FC picco (bpm)<input type="number" id="r_hrmax_w"/></label>
+      <label>FC a 1′ recupero (bpm)<input type="number" id="r_hr1_w"/></label>
+      <label>FC a 3′ recupero (bpm)<input type="number" id="r_hr3_w"/></label>
+
+      <label>SpO₂ nadir (%)<input type="number" id="r_spo2_w"/></label>
+      <label>Borg max (6–20)<input type="number" id="r_borg_w"/></label>
+
+      <label>SBP riposo (mmHg)<input type="number" id="r_sbp_rest"/></label>
+      <label>DBP riposo (mmHg)<input type="number" id="r_dbp_rest"/></label>
+      <label>SBP picco (mmHg)<input type="number" id="r_sbp"/></label>
+      <label>DBP picco (mmHg)<input type="number" id="r_dbp"/></label>
+      <label>SBP 1′ (mmHg)<input type="number" id="r_sbp1"/></label>
+      <label>DBP 1′ (mmHg)<input type="number" id="r_dbp1"/></label>
+      <label>SBP 3′ (mmHg)<input type="number" id="r_sbp3"/></label>
+      <label>DBP 3′ (mmHg)<input type="number" id="r_dbp3"/></label>
+    </div>
+
+    <div id="watt_criteria" class="card hidden">
+      <h3>Criteri di interruzione osservati (promemoria)</h3>
+      <div class="tags">
+        <label class="tag"><input type="checkbox" id="c_angina"> Angina moderata-severa</label>
+        <label class="tag"><input type="checkbox" id="c_drop_sbp"> Caduta SBP >10 mmHg con ↑ carico</label>
+        <label class="tag"><input type="checkbox" id="c_hypertension"> Ipertensione marcata (es. SBP>250 o DBP>115)</label>
+        <label class="tag"><input type="checkbox" id="c_arrhythmia"> Aritmie ventricolari sostenute</label>
+        <label class="tag"><input type="checkbox" id="c_syncope"> Vertigini/sincope</label>
+        <label class="tag"><input type="checkbox" id="c_hypoperfusion"> Segni di scarsa perfusione</label>
+        <label class="tag"><input type="checkbox" id="c_spo2"> SpO₂ <85%</label>
+        <label class="tag"><input type="checkbox" id="c_dyspnea"> Dispnea/cianosi severa</label>
+      </div>
+      <p class="hint">Seleziona solo se presenti: è un promemoria operativo, non sostituisce il giudizio clinico.</p>
+    </div>
+
+    <!-- CPET fields -->
+    <div id="cpet_fields" class="grid hidden">
       <label>VO₂ peak (mL/min)<input type="number" id="r_vo2pk"/></label>
       <label>VO₂/kg (mL·kg⁻¹·min⁻¹)<input type="number" id="r_vo2kg"/></label>
       <label>VE/VCO₂ slope<input type="number" id="r_slope"/></label>
       <label>OUES<input type="number" id="r_oues" step="0.01"/></label>
       <label>VEmax (L/min)<input type="number" id="r_vemax"/></label>
-      <label>HRmax (bpm)<input type="number" id="r_hrmax"/></label>
-      <label>HRR 1′ (bpm)<input type="number" id="r_hrr"/></label>
+
+      <label>FC riposo (bpm)<input type="number" id="r_hrrest"/></label>
+      <label>FC picco (bpm)<input type="number" id="r_hrmax"/></label>
+      <label>FC a 1′ recupero (bpm)<input type="number" id="r_hr1"/></label>
+      <label>FC a 3′ recupero (bpm)<input type="number" id="r_hr3"/></label>
+
       <label>RER max<input type="number" id="r_rer" step="0.01"/></label>
       <label>SpO₂ nadir (%)<input type="number" id="r_spo2"/></label>
       <label>Borg max (6–20)<input type="number" id="r_borg"/></label>
+
+      <label>SBP riposo (mmHg)<input type="number" id="c_sbp_rest"/></label>
+      <label>DBP riposo (mmHg)<input type="number" id="c_dbp_rest"/></label>
+      <label>SBP picco (mmHg)<input type="number" id="c_sbp"/></label>
+      <label>DBP picco (mmHg)<input type="number" id="c_dbp"/></label>
+      <label>SBP 1′ (mmHg)<input type="number" id="c_sbp1"/></label>
+      <label>DBP 1′ (mmHg)<input type="number" id="c_dbp1"/></label>
+      <label>SBP 3′ (mmHg)<input type="number" id="c_sbp3"/></label>
+      <label>DBP 3′ (mmHg)<input type="number" id="c_dbp3"/></label>
     </div>
+
     <div class="nav">
-      <button class="secondary" id="back_to_2">Indietro</button>
+      <button class="secondary" id="back_to_2a">Indietro</button>
       <button class="primary" id="step3_next">Analizza risultati</button>
     </div>
   </section>
