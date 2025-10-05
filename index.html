@@ -77,6 +77,10 @@
           <label>FEV₁/FVC LLN (%)<input type="number" id="sp_ratio_lln" step="0.1" placeholder="70"/></label>
         </div>
       </details>
+      <div class="results" id="sp_pred_box">
+        <b>Predetti spirometrici (stima):</b>
+        <div id="sp_pred_text" class="hint">Inserisci età, sesso, altezza e (opz.) FEV₁/FVC per vedere predetti e %.</div>
+      </div>
     </div>
 
     <div class="nav">
@@ -242,6 +246,7 @@
       <label>VE/VCO₂ slope<input type="number" id="r_slope"/></label>
       <label>OUES<input type="number" id="r_oues" step="0.01"/></label>
       <label>VEmax (L/min)<input type="number" id="r_vemax"/></label>
+      <label>Durata prova (min)<input type="number" id="r_dur_c" step="0.1"/></label>
 
       <label>FC riposo (bpm)<input type="number" id="r_hrrest"/></label>
       <label>FC picco (bpm)<input type="number" id="r_hrmax"/></label>

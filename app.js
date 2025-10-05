@@ -12,10 +12,10 @@ let DEVICE=null; // 'cycle'|'treadmill'
 let SUGG=null;   // suggestion object
 
 function goto(step){
-  document.querySelectorAll('.step').forEach(s=>s.classList.remove('active'));
+  var _steps=document.querySelectorAll('.step'); for(var i=0;i<_steps.length;i++){ _steps[i].classList.remove('active'); }
   const el=document.querySelector(`.step[data-step="${step}"]`); if(el){el.classList.add('active'); window.scrollTo({top:0,behavior:'smooth'});}
   if(step==='0a') refreshDeviceStep();
-  if(step===1) showStep1ForMode();
+  if(step===1){ showStep1ForMode(); setTimeout(renderSpiroPred, 20);}
   if(step===2) refreshProtocol();
   if(step===3) showStep3ForMode();
 }
@@ -48,6 +48,26 @@ function textifyNum(v, unit='', digits=0){
 
 
 /* Quick predictions (educational placeholders) */
+
+function renderSpiroPred(){
+  var box = document.getElementById('sp_pred_box');
+  var txt = document.getElementById('sp_pred_text');
+  if(!box||!txt) return;
+  var age = +$('age').value||NaN; var sex=$('sex').value; var h= +$('height').value||NaN;
+  if(!isFinite(age)||!isFinite(h)){ txt.textContent='Inserisci età e altezza per la stima.'; return; }
+  var q=quickPred(age,sex,h); var FEV1p=q.fev1; var FVCp=q.fvc;
+  var FEV1= +$('sp_fev1').value||NaN; var FVC= +$('sp_fvc').value||NaN;
+  var ratio= +$('sp_ratio').value; if(!isFinite(ratio)&&isFinite(FEV1)&&isFinite(FVC)&&FVC>0) ratio=100*FEV1/FVC;
+  var LLN = +$('sp_ratio_lln').value; if(!isFinite(LLN)) LLN = quickLLNratio(age);
+  var fev1pct = (isFinite(FEV1)&&isFinite(FEV1p)&&FEV1p>0)? Math.round(100*FEV1/FEV1p) : NaN;
+  var fvcpct  = (isFinite(FVC)&&isFinite(FVCp)&&FVCp>0)? Math.round(100*FVC/FVCp) : NaN;
+  txt.innerHTML = 'FEV₁ pred: <b>'+ (isFinite(FEV1p)? FEV1p.toFixed(2)+' L':'n.d.') + '</b>' +
+                  (isFinite(fev1pct)? ' — '+fev1pct+'%':'') +
+                  ' &nbsp;•&nbsp; FVC pred: <b>'+ (isFinite(FVCp)? FVCp.toFixed(2)+' L':'n.d.') + '</b>' +
+                  (isFinite(fvcpct)? ' — '+fvcpct+'%':'') +
+                  ' &nbsp;•&nbsp; LLN FEV₁/FVC: <b>'+ (isFinite(LLN)? LLN.toFixed(1)+'%':'n.d.') + '</b>' +
+                  (isFinite(ratio)? ' (rapporto misurato: '+ratio.toFixed(1)+'%)':'');
+}
 function quickPred(age,sex,h_cm){
   const h=h_cm/100; let fev1,fvc;
   if(sex==='M'){ fev1=0.553*Math.pow(h,2.6) - 0.013*age; fvc=0.578*Math.pow(h,2.9) - 0.015*age; }
@@ -139,7 +159,7 @@ $('step1_next').addEventListener('click',()=>{
       SUGG.treadmill={proto, target:t, speed0, grade0, ds, dg, stepmin, rationale:note, title};
       $('proto_sug_text').innerHTML = `<p><b>Treadmill</b> — ${title}: start ${speed0} km/h @ ${grade0}%, step ${stepmin}′, +${ds} km/h & +${dg}%/step, target ${t} min.<br><span class="hint">${note}</span></p>`;
     }
-    $('proto_suggestion').classList.remove('hidden');
+    $('proto_suggestion').classList.remove('hidden'); renderSpiroPred();
     goto(2);
   }catch(e){ $('pred_summary').innerHTML=`<p style="color:#ff8a8a">⚠️ ${e.message}</p>`; }
 });
@@ -216,7 +236,8 @@ function refreshProtocol(){
   }
   $('proto_out').innerHTML=`<p>${txt}</p>`;
 }
-['proto_type','target_min','start_w','inc_w','step_min','gain','tm_proto','tm_target','tm_speed0','tm_grade0','tm_dspeed','tm_dgrade','tm_stepmin'].forEach(id=>{ const el=$(id); if(el) el.addEventListener('input',refreshProtocol); });
+['proto_type','target_min','start_w','inc_w','step_min','gain','tm_proto','tm_target','tm_speed0','tm_grade0','tm_dspeed','tm_dgrade','tm_stepmin'].forEach(function(id){ var el=$(id); if(el) el.addEventListener('input',refreshProtocol); });
+['age','sex','height','sp_fev1','sp_fvc','sp_ratio','sp_ratio_lln'].forEach(function(id){ var el=$(id); if(el) el.addEventListener('input',renderSpiroPred); });
 
 /* Copy treadmill estimate into CPET VO2/kg */
 $('tm_copy_to_cpet').addEventListener('click',()=>{
@@ -509,7 +530,7 @@ $('step3_next').addEventListener('click',()=>{
         const FEV1= +$('sp_fev1').value, FVC= +$('sp_fvc').value; let ratio= +$('sp_ratio').value;
         if(!isFinite(ratio)&&isFinite(FEV1)&&isFinite(FVC)&&FVC>0) ratio=100*FEV1/FVC;
         if(!isFinite(FEV1)&&!isFinite(FVC)) return '';
-        return `FEV₁ ${isFinite(FEV1)?FEV1.toFixed(2)+' L':'n.d.'}, FVC ${isFinite(FVC)?FVC.toFixed(2)+' L':'n.d.'}, rapporto ${isFinite(ratio)?ratio.toFixed(1)+'%':'n.d.'}.`;
+        var age= +$('age').value||NaN, sex=$('sex').value, h= +$('height').value||NaN; var pred=quickPred(age,sex,h); var p1=pred.fev1, p2=pred.fvc; var pct1=(isFinite(FEV1)&&isFinite(p1)&&p1>0)? Math.round(100*FEV1/p1):NaN; var pct2=(isFinite(FVC)&&isFinite(p2)&&p2>0)? Math.round(100*FVC/p2):NaN; return `FEV₁ ${isFinite(FEV1)?FEV1.toFixed(2)+' L':'n.d.'}${isFinite(pct1)?' ('+pct1+'%)':''}, FVC ${isFinite(FVC)?FVC.toFixed(2)+' L':'n.d.'}${isFinite(pct2)?' ('+pct2+'%)':''}, rapporto ${isFinite(ratio)?ratio.toFixed(1)+'%':'n.d.'}.`;
       })(),
       hrrest, sbp_rest, dbp_rest, vo2kg, vo2kg_pred, vo2kg_pct, vo2: vo2pk, rer, slope, br:BR, oues, vemax,
       dur, reason, symptoms, borg, hrmax, hr_pct, sbp, dbp, dSBP, hrr1, hrr3
@@ -528,9 +549,9 @@ $('step2_next').addEventListener('click',()=>goto(3));
 /* Restart */
 $('restart').addEventListener('click',()=>{
   MODE=null; DEVICE=null; SUGG=null;
-  document.querySelectorAll('input').forEach(i=>i.value='');
-  document.querySelectorAll('select').forEach(s=>s.selectedIndex=0);
-  document.querySelectorAll('input[type=checkbox]').forEach(c=>c.checked=false);
+  var _ins=document.querySelectorAll('input'); for(var i=0;i<_ins.length;i++){ _ins[i].value=''; }
+  var _sels=document.querySelectorAll('select'); for(var i=0;i<_sels.length;i++){ _sels[i].selectedIndex=0; }
+  var _cks=document.querySelectorAll('input[type=checkbox]'); for(var i=0;i<_cks.length;i++){ _cks[i].checked=false; }
   ['pred_summary','spiro_out','wiz_out','proto_suggestion','tm_mets_card'].forEach(id=>{ const el=document.getElementById(id); if(el&&el.classList) el.classList.add('hidden'); });
   document.getElementById('pred_summary').innerHTML='';
   goto(0);
