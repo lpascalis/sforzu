@@ -1,329 +1,143 @@
 <!doctype html>
 <html lang="it">
 <head>
-  <meta charset="utf-8"/>
-  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no"/>
-  <title>Sforzu v6.7 • Wizard Clinico (offline)</title>
-  <meta name="theme-color" content="#0b0b0c"/>
-  <link rel="manifest" href="manifest.webmanifest"/>
-  <link rel="apple-touch-icon" href="icons/apple-touch-icon-180.png"/>
-  <link rel="stylesheet" href="styles.css"/>
-  <meta name="apple-mobile-web-app-capable" content="yes"/>
-  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <link rel="manifest" href="manifest.json">
+  <link rel="apple-touch-icon" href="assets/logo.png">
+  <title>Sforzu</title>
+  <style>
+    :root{--bg:#0b0b0c;--card:#141417;--ink:#f4f6fb;--muted:#a5a6ad;--accent:#58a6ff;--ok:#34d399;--warn:#f59e0b;--bad:#ef4444;}
+    *{box-sizing:border-box} body{margin:0;background:var(--bg);color:var(--ink);font-family:system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial;}
+    header{display:flex;gap:.7rem;align-items:center;padding:12px 16px;border-bottom:1px solid #222;}
+    header img{width:28px;height:28px;border-radius:6px;object-fit:cover}
+    header h1{font-size:18px;margin:0;font-weight:700;letter-spacing:.3px}
+    main{padding:16px;max-width:860px;margin:0 auto}
+    .card{background:var(--card);border:1px solid #232329;border-radius:16px;padding:16px;margin-bottom:14px;box-shadow:0 6px 18px rgba(0,0,0,.28)}
+    .row{display:grid;grid-template-columns:1fr;gap:12px}
+    @media(min-width:700px){.row-2{grid-template-columns:1fr 1fr}}
+    label{display:block;color:var(--muted);font-size:14px;margin-bottom:6px}
+    input,select,textarea{width:100%;background:#0e0e11;border:1px solid #292932;color:var(--ink);padding:10px 12px;border-radius:12px;font-size:16px}
+    .btn{display:inline-flex;align-items:center;gap:.5rem;background:var(--accent);color:#001225;border:0;padding:10px 14px;border-radius:12px;font-weight:700}
+    .btn.secondary{background:#1f2937;color:#d1d5db}
+    .btnbar{display:flex;gap:10px;flex-wrap:wrap}
+    .pill{display:inline-block;padding:2px 8px;border-radius:999px;font-size:12px;border:1px solid #2a2a33;color:#c9cad1}
+    .hidden{display:none!important}
+    .hint{color:var(--muted);font-size:13px}
+    .results b{color:#fff}
+    .ok{color:var(--ok)} .warn{color:var(--warn)} .bad{color:var(--bad)}
+    .title{font-size:16px;font-weight:700;margin:0 0 8px}
+    textarea.report{min-height:260px}
+  </style>
 </head>
 <body>
-<header class="app-header"><h1>Sforzu</h1></header>
-
-<main id="wizard">
-  <!-- STEP 0 -->
-  <section class="step active" data-step="0">
-    <h2>Cosa vuoi fare?</h2>
-    <div class="chooser">
-      <button class="big" id="choose_watt">🚴 Watt Test</button>
-      <button class="big" id="choose_cpet">🫁 CPET</button>
-    </div>
-  </section>
-
-  <!-- STEP 0a: DEVICE -->
-  <section class="step" data-step="0a">
-    <h2>Seleziona l’ergometro</h2>
-    <p id="device_note" class="hint"></p>
-    <div class="chooser">
-      <button class="big" id="choose_cycle">🚴‍♂️ Cicloergometro</button>
-      <button class="big" id="choose_treadmill">🏃 Treadmill</button>
-    </div>
-  </section>
-
-  <!-- STEP 1 -->
-  <section class="step" data-step="1">
-    <h2>Dati del paziente</h2>
-    <div class="grid">
-      <label>Età (anni)<input type="number" id="age" min="5" max="95"/></label>
-      <label>Sesso
-        <select id="sex"><option value="M">Maschio</option><option value="F">Femmina</option></select>
-      </label>
-      <label>Etnia di riferimento
-        <select id="eth">
-          <option value="cauc">Caucasica</option>
-          <option value="afr">Afrodiscendente</option>
-          <option value="easia">Asiatica orientale</option>
-          <option value="latam">Sudamericana/Latinoamericana</option>
-          <option value="altro">Altro/Non specificato</option>
-        </select>
-      </label>
-      <label>Altezza (cm)<input type="number" id="height" min="80" max="220"/></label>
-      <label>Peso (kg)<input type="number" id="weight" min="15" max="220" step="0.1"/></label>
-      <label>Attività fisica (ore/settimana)<input type="number" id="train_h" min="0" max="30" step="0.5"/></label>
-    </div>
-
-    <details class="card">
-      <summary>Profilo clinico (opzionale)</summary>
-      <div class="tags">
-        <label class="tag"><input type="checkbox" id="p_ihd"> Cardiopatia ischemica</label>
-        <label class="tag"><input type="checkbox" id="p_hf"> Insufficienza cardiaca</label>
-        <label class="tag"><input type="checkbox" id="p_copd"> BPCO</label>
-        <label class="tag"><input type="checkbox" id="p_ob"> Obesità</label>
-        <label class="tag"><input type="checkbox" id="p_elder"> Anziano</label>
-        <label class="tag"><input type="checkbox" id="p_ath"> Atleta</label>
-        <label class="tag"><input type="checkbox" id="p_bb"> Beta-bloccante</label>
-      </div>
-    </details>
-
-    <div id="spiro_block" class="card hidden">
-      <h3>Spirometria pre-test (solo CPET)</h3>
-      <div class="grid">
-        <label>FVC (L)<input type="number" id="sp_fvc" step="0.01"/></label>
-        <label>FEV₁ (L)<input type="number" id="sp_fev1" step="0.01"/></label>
-        <label>FEV₁/FVC (%)<input type="number" id="sp_ratio" step="0.1" placeholder="auto"/></label>
-        <label>MVV (L/min) <small>(se assente stimata 40×FEV₁)</small><input type="number" id="sp_mvv" step="1"/></label>
-      </div>
-      <div class="tags"><label class="tag"><input type="checkbox" id="sp_chrb"> Bronchite cronica/Asma (contesto clinico)</label></div>
-      <details class="card">
-        <summary>Predetti/LLN opzionali</summary>
-        <div class="grid">
-          <label>FVC pred (L)<input type="number" id="sp_fvc_pred" step="0.01"/></label>
-          <label>FEV₁ pred (L)<input type="number" id="sp_fev1_pred" step="0.01"/></label>
-          <label>FEV₁/FVC LLN (%)<input type="number" id="sp_ratio_lln" step="0.1" placeholder="70"/></label>
+<header>
+  <img src="assets/logo.png" alt="Sforzu">
+  <h1>Sforzu — Watt Test & CPET</h1>
+</header>
+<main>
+  <div class="card">
+    <div class="title">Wizard</div>
+    <div class="row row-2">
+      <div>
+        <label>Seleziona modalità</label>
+        <div class="btnbar">
+          <button class="btn" id="b_watt">WATT TEST</button>
+          <button class="btn secondary" id="b_cpet">CPET</button>
         </div>
-      </details>
-      
-      <div class="field-row">
-        <label>Metodo predetti
-          <select id="sp_method">
-            <option value="lms_rn" selected>Predetti avanzati (LMS, race-neutral integrato)</option>
-            <option value="quick">Stima rapida (semplice)</option>
-          </select>
-        </label>
       </div>
-      <div class="results" id="sp_lms_box">
-        <b>LMS e Z-score:</b>
-        <div id="sp_lms_text" class="hint">Verranno calcolati L, M (predetto), S e Z-score per FEV₁, FVC e FEV₁/FVC.</div>
-      </div>
-
-      <div class="results" id="sp_pred_box">
-        <b>Predetti spirometrici (stima):</b>
-        <div id="sp_pred_text" class="hint">Inserisci età, sesso, altezza e (opz.) FEV₁/FVC per vedere predetti e %.</div>
-      </div>
-    </div>
-
-    <div class="nav">
-      <button id="step1_next" class="primary">Calcola predetti e suggerisci protocollo</button>
-    </div>
-    <div id="pred_summary" class="results"></div>
-
-    <div id="proto_suggestion" class="card hidden">
-      <h3>Suggerimento protocollo</h3>
-      <div id="proto_sug_text" class="results"></div>
-      <div class="row">
-        <button id="copy_suggestion" class="secondary">Copia nello Step 2</button>
-      </div>
-    </div>
-  </section>
-
-  <!-- STEP 2 -->
-  <section class="step" data-step="2">
-    <h2>Protocollo</h2>
-
-    <!-- Cycle block -->
-    <div id="cycle_block" class="grid">
-      <label>Tipo di prova
-        <select id="proto_type">
-          <option value="ramp">Rampa</option>
-          <option value="step">A step</option>
-          <option value="constant">Carico costante</option>
-          <option value="monark">Monark (kgf×rpm)</option>
+      <div>
+        <label>Ergometro</label>
+        <select id="ergotype">
+          <option value="cycle">Cicloergometro</option>
+          <option value="tm">Treadmill</option>
         </select>
-      </label>
-      <label>Durata target (min)<input type="number" id="target_min" value="10" step="0.5"/></label>
-      <label>Start (W)<input type="number" id="start_w" value="20" step="5"/></label>
-      <label>ΔW/min o step (W)<input type="number" id="inc_w" value="15" step="1"/></label>
-      <label>Durata step (min, se step)<input type="number" id="step_min" value="2" step="0.5"/></label>
-      <label>ΔVO₂/ΔWR (mL/min/W)<input type="number" id="gain" value="10" step="0.1"/></label>
-    </div>
-
-    <!-- Treadmill block -->
-    <div id="tm_block" class="grid hidden">
-      <label>Protocollo treadmill
-        <select id="tm_proto">
-          <option value="ramp_tm">Rampa personalizzata</option>
-          <option value="mod_bruce">Modified Bruce (suggerito)</option>
-          <option value="bruce">Bruce</option>
-          <option value="naughton">Naughton</option>
-          <option value="balke">Balke</option>
-        </select>
-      </label>
-      <label>Durata target (min)<input type="number" id="tm_target" value="10" step="0.5"/></label>
-      <label>Velocità start (km/h)<input type="number" id="tm_speed0" value="3.0" step="0.1"/></label>
-      <label>Pendenza start (%)<input type="number" id="tm_grade0" value="0" step="0.5"/></label>
-      <label>Δ velocità per step (km/h)<input type="number" id="tm_dspeed" value="0.2" step="0.1"/></label>
-      <label>Δ pendenza per step (%)<input type="number" id="tm_dgrade" value="1" step="0.5"/></label>
-      <label>Durata step (min)<input type="number" id="tm_stepmin" value="1" step="0.5"/></label>
-    </div>
-
-    <!-- Treadmill METs preview -->
-    <div id="tm_mets_card" class="card hidden">
-      <h3>Stima METs treadmill (preview)</h3>
-      <div id="tm_mets_out" class="results"></div>
-      <div class="row">
-        <button id="tm_copy_to_cpet" class="secondary">Usa come stima VO₂/kg in CPET</button>
       </div>
     </div>
+  </div>
 
-    <div class="card" id="monark_block" style="display:none">
-      <h3>Monark kgf ↔ Watt</h3>
-      <div class="grid">
-        <label>rpm<input type="number" id="m_rpm" value="60"/></label>
-        <label>kgf<input type="number" id="m_kgf" value="1.5" step="0.1"/></label>
-        <label>Watt<input type="number" id="m_w" value="550"/></label>
+  <div class="card">
+    <div class="title">Dati anagrafici e antropometrici</div>
+    <div class="row row-2">
+      <div><label>Età (anni)</label><input id="age" type="number" inputmode="decimal"></div>
+      <div><label>Sesso</label><select id="sex"><option value="M">Maschio</option><option value="F">Femmina</option></select></div>
+      <div><label>Altezza (cm)</label><input id="height" type="number" inputmode="decimal"></div>
+      <div><label>Peso (kg)</label><input id="weight" type="number" inputmode="decimal"></div>
+    </div>
+    <div class="row">
+      <div><label>Attività fisica (ore/settimana)</label><input id="pa_hours" type="number" inputmode="decimal"></div>
+      <div><label>Diagnosi/Note cliniche (facoltativo)</label><input id="dx" placeholder="es. cardiopatia ischemica, atleta, BPCO lieve..."></div>
+    </div>
+  </div>
+
+  <div class="card" id="proto_suggestion">
+    <div class="title">Protocollo consigliato</div>
+    <div class="hint" id="proto_text">Inserisci età, sesso, peso e attività: verrà proposto un suggerimento di rampa/durata in base al profilo.</div>
+    <div class="btnbar"><button class="btn secondary" id="apply_proto">Usa parametri suggeriti</button></div>
+  </div>
+
+  <div class="card" id="block_watt">
+    <div class="title">Watt Test — Parametri prova</div>
+    <div class="row row-2">
+      <div><label>Carico iniziale (W)</label><input id="w_start" type="number"></div>
+      <div><label>Rampa/step (W/min)</label><input id="w_ramp" type="number"></div>
+      <div><label>Durata prevista (min)</label><input id="w_dur" type="number"></div>
+      <div><label>Target FC (% della teorica)</label><input id="w_hrt" type="number"></div>
+    </div>
+    <div class="title" style="margin-top:12px">Watt Test — Misurati</div>
+    <div class="row row-2">
+      <div><label>Watt massimi</label><input id="r_wmax" type="number"></div>
+      <div><label>Durata effettiva (min)</label><input id="r_dur" type="number"></div>
+      <div><label>FC riposo (bpm)</label><input id="r_hrrest" type="number"></div>
+      <div><label>FC picco (bpm)</label><input id="r_hrmax" type="number"></div>
+      <div><label>PAS picco (mmHg)</label><input id="r_pas" type="number"></div>
+      <div><label>PAD picco (mmHg)</label><input id="r_pad" type="number"></div>
+      <div><label>Borg dispnea</label><input id="r_borg" type="number"></div>
+    </div>
+    <div class="btnbar" style="margin-top:10px">
+      <button class="btn" id="analyze_watt">Analizza risultati Watt</button>
+    </div>
+    <div class="results" id="watt_results"></div>
+  </div>
+
+  <div class="card" id="block_cpet">
+    <div class="title">CPET — Spirometria (pre-test)</div>
+    <div class="row row-2">
+      <div><label>Metodo predetti</label>
+        <select id="sp_method"><option value="lms_rn" selected>Predetti avanzati (LMS, race-neutral)</option><option value="quick">Stima rapida</option></select>
       </div>
-      <div class="row">
-        <button id="m_from_kgf">Calcola W</button>
-        <button id="m_from_w">Calcola kgf</button>
-      </div>
-      <div id="m_out" class="results"></div>
+      <div><label>FEV₁ misurato (L)</label><input id="sp_fev1" type="number"></div>
+      <div><label>FVC misurata (L)</label><input id="sp_fvc" type="number"></div>
+      <div><label>FEV₁/FVC (%)</label><input id="sp_ratio" type="number" placeholder="Se vuoto, calcolo da FEV₁/FVC"></div>
     </div>
+    <div class="results" id="sp_pred_box"></div>
+    <div class="results" id="sp_lms_box"><b>LMS e Z-score:</b> <span id="sp_lms_text" class="hint">Inserisci età/altezza e misurati.</span></div>
 
-    <div id="proto_out" class="results"></div>
-    <div class="nav">
-      <button class="secondary" id="back_to_1">Indietro</button>
-      <button class="primary" id="step2_next">Avvia test</button>
+    <div class="title" style="margin-top:16px">CPET — Misurati principali</div>
+    <div class="row row-2">
+      <div><label>Durata (min)</label><input id="r_dur_c" type="number"></div>
+      <div><label>VO₂ picco (ml/min/kg)</label><input id="r_vo2" type="number"></div>
+      <div><label>RER picco</label><input id="r_rer" type="number" step="0.01"></div>
+      <div><label>VE/VCO₂ slope</label><input id="r_vevco2" type="number" step="0.1"></div>
+      <div><label>O₂ pulse picco (ml/batt)</label><input id="r_o2pulse" type="number" step="0.1"></div>
     </div>
-  </section>
-
-  <!-- STEP 3 -->
-  <section class="step" data-step="3">
-    <h2>Risultati misurati</h2>
-
-    <div class="card">
-      <label>Formula FC max predetta
-        <select id="hrmax_formula">
-          <option value="fox">Fox: 220 − età</option>
-          <option value="tanaka">Tanaka: 208 − 0.7×età</option>
-        </select>
-      </label>
+    <div class="btnbar" style="margin-top:10px">
+      <button class="btn" id="analyze_cpet">Analizza risultati CPET</button>
     </div>
+    <div class="results" id="cpet_results"></div>
+  </div>
 
-    <!-- WATT TEST fields -->
-    <div id="watt_fields" class="grid hidden">
-      <label>Watt di picco (W)<input type="number" id="r_wpeak"/></label>
-      <label>W/kg di picco<input type="number" id="r_wkg" placeholder="auto" step="0.01"/></label>
-      <label>Durata prova (min)<input type="number" id="r_dur" step="0.1"/></label>
-
-      <label>FC riposo (bpm)<input type="number" id="r_hrrest_w"/></label>
-      <label>FC picco (bpm)<input type="number" id="r_hrmax_w"/></label>
-      <label>FC a 1′ recupero (bpm)<input type="number" id="r_hr1_w"/></label>
-      <label>FC a 3′ recupero (bpm)<input type="number" id="r_hr3_w"/></label>
-
-      <label>SpO₂ nadir (%)<input type="number" id="r_spo2_w"/></label>
-      <label>Borg max (6–20)<input type="number" id="r_borg_w"/></label>
-
-      <label>SBP riposo (mmHg)<input type="number" id="r_sbp_rest"/></label>
-      <label>DBP riposo (mmHg)<input type="number" id="r_dbp_rest"/></label>
-      <label>SBP picco (mmHg)<input type="number" id="r_sbp"/></label>
-      <label>DBP picco (mmHg)<input type="number" id="r_dbp"/></label>
-      <label>SBP 1′ (mmHg)<input type="number" id="r_sbp1"/></label>
-      <label>DBP 1′ (mmHg)<input type="number" id="r_dbp1"/></label>
-      <label>SBP 3′ (mmHg)<input type="number" id="r_sbp3"/></label>
-      <label>DBP 3′ (mmHg)<input type="number" id="r_dbp3"/></label>
+  <div class="card">
+    <div class="title">Referto</div>
+    <div class="btnbar">
+      <button class="btn secondary" id="short_rep">Referto sintetico</button>
+      <button class="btn" id="long_rep">Referto completo</button>
     </div>
-
-    <div id="watt_criteria" class="card hidden">
-      <h3>Criteri di interruzione / Sintomi</h3>
-      <div class="grid">
-        <label>Motivo di interruzione
-          <select id="r_reason">
-            <option value="affaticamento muscolare">Affaticamento muscolare</option>
-            <option value="dispnea marcata">Dispnea marcata</option>
-            <option value="dolore toracico tipico">Dolore toracico tipico</option>
-            <option value="esaurimento soggettivo">Esaurimento soggettivo</option>
-            <option value="altro">Altro (specificare sotto)</option>
-          </select>
-        </label>
-        <label>Note sintomi (testo libero)<input type="text" id="r_symptoms" placeholder="es. dispnea di grado 15 (Borg), vertigini lievi..."/></label>
-      </div>
-      <h4>ECG / alterazioni ST (opzionale)</h4>
-      <div class="grid">
-        <label>Tipo
-          <select id="r_st_type">
-            <option value="nessuna">Nessuna alterazione significativa</option>
-            <option value="sottoslivellamento">Sottoslivellamento ST</option>
-            <option value="sopraslivellamento">Sopraslivellamento ST</option>
-          </select>
-        </label>
-        <label>Entità (mm)<input type="number" id="r_st_mm" step="0.1"/></label>
-        <label>Derivazioni<input type="text" id="r_st_leads" placeholder="es. V5-V6, II, III..."/></label>
-        <label>Comparsa a (W)<input type="number" id="r_st_w"/></label>
-        <label>Comparsa a (bpm)<input type="number" id="r_st_hr"/></label>
-        <label>Normalizzazione entro (min)<input type="number" id="r_st_norm_min" step="0.1"/></label>
-      </div>
-      <div class="grid">
-        <label>Aritmie (descrivere se presenti)<input type="text" id="r_arrh" placeholder="es. VE sporadiche, TV non sostenuta, ecc."/></label>
-      </div>
-      <p class="hint">Promemoria operativo; non sostituisce il giudizio clinico.</p>
-    </div>
-
-    <!-- CPET fields -->
-    <div id="cpet_fields" class="grid hidden">
-      <label>VO₂ peak (mL/min)<input type="number" id="r_vo2pk"/></label>
-      <label>VO₂/kg (mL·kg⁻¹·min⁻¹)<input type="number" id="r_vo2kg"/></label>
-      <label>VE/VCO₂ slope<input type="number" id="r_slope"/></label>
-      <label>OUES<input type="number" id="r_oues" step="0.01"/></label>
-      <label>VEmax (L/min)<input type="number" id="r_vemax"/></label>
-      <label>Durata prova (min)<input type="number" id="r_dur_c" step="0.1"/></label>
-
-      <label>FC riposo (bpm)<input type="number" id="r_hrrest"/></label>
-      <label>FC picco (bpm)<input type="number" id="r_hrmax"/></label>
-      <label>FC a 1′ recupero (bpm)<input type="number" id="r_hr1"/></label>
-      <label>FC a 3′ recupero (bpm)<input type="number" id="r_hr3"/></label>
-
-      <label>RER max<input type="number" id="r_rer" step="0.01"/></label>
-      <label>SpO₂ nadir (%)<input type="number" id="r_spo2"/></label>
-      <label>Borg max (6–20)<input type="number" id="r_borg"/></label>
-
-      <label>SBP riposo (mmHg)<input type="number" id="c_sbp_rest"/></label>
-      <label>DBP riposo (mmHg)<input type="number" id="c_dbp_rest"/></label>
-      <label>SBP picco (mmHg)<input type="number" id="c_sbp"/></label>
-      <label>DBP picco (mmHg)<input type="number" id="c_dbp"/></label>
-      <label>SBP 1′ (mmHg)<input type="number" id="c_sbp1"/></label>
-      <label>DBP 1′ (mmHg)<input type="number" id="c_dbp1"/></label>
-      <label>SBP 3′ (mmHg)<input type="number" id="c_sbp3"/></label>
-      <label>DBP 3′ (mmHg)<input type="number" id="c_dbp3"/></label>
-    </div>
-
-    <div id="cpet_notes" class="card hidden">
-      <h3>Sintomi & motivo di interruzione (CPET)</h3>
-      <div class="grid">
-        <label>Motivo di interruzione
-          <select id="c_reason">
-            <option value="affaticamento muscolare">Affaticamento muscolare</option>
-            <option value="dispnea marcata">Dispnea marcata</option>
-            <option value="dolore toracico">Dolore toracico</option>
-            <option value="esaurimento soggettivo">Esaurimento soggettivo</option>
-            <option value="altro">Altro (specificare sotto)</option>
-          </select>
-        </label>
-        <label>Note sintomi (testo libero)<input type="text" id="c_symptoms" placeholder="es. dispnea 15/20 (Borg), capogiro lieve..."/></label>
-      </div>
-    </div>
-
-    <div class="nav">
-      <button class="secondary" id="back_to_2a">Indietro</button>
-      <button class="primary" id="step3_next">Analizza risultati</button>
-    </div>
-  </section>
-
-  <!-- STEP 4 -->
-  <section class="step" data-step="4">
-    <h2>Interpretazione</h2>
-    <h3>Referto sintetico</h3>
-    <div id="report" class="report"></div>
-    <h3 style="margin-top:16px">Referto completo</h3>
-    <div id="report_long" class="report"></div>
-    <div class="nav"><button class="primary" id="restart">Nuovo test</button></div>
-  </section>
+    <textarea class="report" id="report" placeholder="Il referto verrà compilato qui…"></textarea>
+  </div>
 </main>
-
-<footer class="app-footer"><button id="installBtn" hidden>Aggiungi a Home</button></footer>
 <script src="app.js"></script>
 </body>
 </html>
