@@ -24,5 +24,10 @@ button.big{font-size:18px;padding:18px 16px;border-radius:18px;width:100%}
 .report{white-space:pre-wrap;line-height:1.5;background:#111114;border:1px solid #2a2a30;border-radius:12px;padding:14px}
 .hidden{display:none}
 .hint{color:var(--muted);font-size:13px}
+h3{margin:10px 0 8px 0}
 @media(max-width:560px){.grid{grid-template-columns:1fr}}
 .app-footer{position:sticky;bottom:0;padding:10px 14px;border-top:1px solid #1e1e23;background:linear-gradient(0deg,#0b0b0c,#0b0b0c00);display:flex;justify-content:flex-end}
+
+.results.warn{border-color:#ffb84d; background:#1a140a}
+.results.alert{border-color:#ff5c5c; background:#1a0e0e}
+.card.alert{border:2px solid #ff5c5c; box-shadow:0 0 0 2px rgba(255,92,92,.25) inset}
