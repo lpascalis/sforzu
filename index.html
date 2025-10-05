@@ -16,7 +16,165 @@
     <img src="assets/logo.png" class="logo" alt="Sforzu">
     <h1>Sforzu</h1>
   </header>
-  <main id="app"><p>Versione finale caricata correttamente.</p></main>
+
+  <main id="app">
+    <section id="mode-select" class="card">
+      <h2>Seleziona modalità</h2>
+      <div class="grid2">
+        <button class="btn-lg" data-go="watt-wizard">Watt Test</button>
+        <button class="btn-lg" data-go="cpet-wizard">CPET</button>
+      </div>
+    </section>
+
+    <!-- WATT TEST -->
+    <section id="watt-wizard" class="card hidden">
+      <h2>Watt Test · Wizard</h2>
+      <div class="grid">
+        <label>Modalità
+          <select id="wt_modality">
+            <option value="cycle">Cicloergometro</option>
+            <option value="treadmill">Treadmill</option>
+          </select>
+        </label>
+        <label>Profilo clinico
+          <select id="wt_profile">
+            <option>Adulto sano / attivo</option>
+            <option>Sedentario / decondizionato</option>
+            <option>Atleta</option>
+            <option>Anziano / frailty</option>
+            <option>Cardiopatia ischemica</option>
+            <option>Scompenso cardiaco</option>
+            <option>BPCO / Asma</option>
+            <option>Post-COVID / Long-COVID</option>
+          </select>
+        </label>
+        <label>Attività fisica settimanale (h)
+          <input type="number" id="wt_hours" min="0" step="0.5" value="0">
+        </label>
+      </div>
+
+      <details class="mt">
+        <summary>Dati paziente</summary>
+        <div class="grid">
+          <label>Età (anni)<input type="number" id="age" min="5" max="100" value="50"></label>
+          <label>Sesso
+            <select id="sex"><option value="M">Maschio</option><option value="F">Femmina</option></select>
+          </label>
+          <label>Peso (kg)<input type="number" id="weight" min="20" max="250" step="0.1" value="75"></label>
+          <label>Altezza (cm)<input type="number" id="height" min="100" max="220" step="0.1" value="175"></label>
+          <label>β-bloccante
+            <select id="on_bb"><option value="no">No</option><option value="si">Sì</option></select>
+          </label>
+          <label>Formula FCmax
+            <select id="hrmax_formula">
+              <option value="tanaka">Tanaka: 208 − 0.7×età</option>
+              <option value="220">220 − età</option>
+            </select>
+          </label>
+        </div>
+      </details>
+
+      <div class="grid2 mt">
+        <button class="btn" id="btnSuggestWT">Suggerisci protocollo</button>
+        <button class="btn" id="btnUseSuggestionWT">Usa suggerimento</button>
+      </div>
+
+      <div id="wt_suggestion" class="hint mt"></div>
+
+      <details class="mt">
+        <summary>Protocollo scelto</summary>
+        <div class="grid">
+          <label>Carico iniziale (W)<input type="number" id="wt_startW" value="25" step="5"></label>
+          <label>Rampa (W/min)<input type="number" id="wt_ramp" value="15" step="1"></label>
+          <label>Durata attesa (min)<input type="number" id="wt_target_min" value="10" step="1"></label>
+        </div>
+      </details>
+
+      <details class="mt">
+        <summary>Misure principali</summary>
+        <div class="grid">
+          <label>Watt massimi (W)<input type="number" id="wt_peakW" value="200"></label>
+          <label>FC a riposo (bpm)<input type="number" id="hr_rest" value="70"></label>
+          <label>FC a 1' (bpm)<input type="number" id="hr_1min" value="100"></label>
+          <label>FC picco (bpm)<input type="number" id="hr_peak" value="160"></label>
+          <label>PAS riposo (mmHg)<input type="number" id="sbp_rest" value="120"></label>
+          <label>PAD riposo (mmHg)<input type="number" id="dbp_rest" value="75"></label>
+          <label>PAS picco (mmHg)<input type="number" id="sbp_peak" value="190"></label>
+          <label>PAD picco (mmHg)<input type="number" id="dbp_peak" value="85"></label>
+          <label>PAS 1' (mmHg)<input type="number" id="sbp_1min" value="165"></label>
+          <label>Durata esercizio (min)<input type="number" id="wt_duration" value="10" step="0.5"></label>
+        </div>
+      </details>
+
+      <div class="grid2 mt">
+        <button class="btn-primary" id="btnCalcWT">Calcola risultati</button>
+        <button class="btn-outline" data-go="mode-select">Indietro</button>
+      </div>
+
+      <section id="wt_results" class="mt hidden"></section>
+    </section>
+
+    <!-- CPET -->
+    <section id="cpet-wizard" class="card hidden">
+      <h2>CPET · Wizard</h2>
+      <div class="grid">
+        <label>Modalità
+          <select id="cpet_modality">
+            <option value="cycle">Cicloergometro</option>
+            <option value="treadmill">Treadmill</option>
+          </select>
+        </label>
+        <label>Include spirometria pre-test?
+          <select id="cpet_spiro"><option value="no">No</option><option value="si">Sì</option></select>
+        </label>
+      </div>
+      <details class="mt">
+        <summary>Dati paziente</summary>
+        <div class="grid">
+          <label>Età<input type="number" id="c_age" value="50" min="5"></label>
+          <label>Sesso
+            <select id="c_sex"><option value="M">Maschio</option><option value="F">Femmina</option></select>
+          </label>
+          <label>Peso (kg)<input type="number" id="c_weight" value="75" step="0.1"></label>
+          <label>Altezza (cm)<input type="number" id="c_height" value="175" step="0.1"></label>
+        </div>
+      </details>
+
+      <details class="mt">
+        <summary>Parametri CPET (inserimento manuale)</summary>
+        <div class="grid">
+          <label>VO₂ picco (ml/kg/min)<input type="number" id="c_vo2pk" value="28" step="0.1"></label>
+          <label>AT (ml/kg/min)<input type="number" id="c_at" value="16" step="0.1"></label>
+          <label>VE/VCO₂ slope<input type="number" id="c_vevco2" value="29" step="0.1"></label>
+          <label>OUES<input type="number" id="c_oues" value="1.6" step="0.1"></label>
+          <label>EqO₂ picco<input type="number" id="c_eqo2" value="32" step="0.1"></label>
+          <label>EqCO₂ picco<input type="number" id="c_eqco2" value="33" step="0.1"></label>
+          <label>O₂ pulse picco (ml/batt)<input type="number" id="c_o2pulse" value="12" step="0.1"></label>
+          <label>RER picco<input type="number" id="c_rer" value="1.12" step="0.01"></label>
+          <label>FC picco (bpm)<input type="number" id="c_hrpk" value="160"></label>
+          <label>PAS picco<input type="number" id="c_sbp" value="190"></label>
+        </div>
+      </details>
+
+      <details class="mt hidden" id="spiro_block">
+        <summary>Spirometria (opzionale)</summary>
+        <div class="grid">
+          <label>FEV₁ misurato (L)<input type="number" id="sp_fev1" value="2.8" step="0.01"></label>
+          <label>FVC misurato (L)<input type="number" id="sp_fvc" value="3.6" step="0.01"></label>
+          <label>Rapporto FEV₁/FVC (%)<input type="number" id="sp_ratio" value="78" step="0.1"></label>
+        </div>
+        <div class="hint mt">Predetti basati su GLI 2012 semplificati (percentuali e LLN approssimate). Nessun salvataggio.</div>
+      </details>
+
+      <div class="grid2 mt">
+        <button class="btn-primary" id="btnCalcCPET">Calcola risultati</button>
+        <button class="btn-outline" data-go="mode-select">Indietro</button>
+      </div>
+
+      <section id="cpet_results" class="mt hidden"></section>
+    </section>
+  </main>
+
   <footer class="foot">PWA · Offline · Nessun salvataggio locale · © Sforzu</footer>
 </body>
 </html>
