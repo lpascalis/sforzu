@@ -1,7 +1,7 @@
 /* PWA */
 let deferredPrompt; const installBtn=document.getElementById('installBtn');
 window.addEventListener('beforeinstallprompt',e=>{e.preventDefault();deferredPrompt=e;installBtn.hidden=false;});
-installBtn?.addEventListener('click',async()=>{installBtn.hidden=true;await deferredPrompt.prompt();deferredPrompt=null;});
+if(installBtn){installBtn.addEventListener('click',async()=>{installBtn.hidden=true;await deferredPrompt.prompt();deferredPrompt=null;});}
 if('serviceWorker' in navigator){navigator.serviceWorker.register('./sw.js');}
 
 const $=(id)=>document.getElementById(id);
@@ -375,17 +375,17 @@ $('step3_next').addEventListener('click',()=>{
       const sbp3= +$('r_sbp3').value||NaN;
       const dbp3= +$('r_dbp3').value||NaN;
 
-      const reason = ($('r_reason')?.value)||'';
-      const symptoms = ($('r_symptoms')?.value)||'';
+      var _r1=$('r_reason'); const reason = (_r1 && _r1.value) || '';
+      var _s1=$('r_symptoms'); const symptoms = (_s1 && _s1.value) || '';
       const st = {
-        type: ($('r_st_type')?.value)||'nessuna',
+        type: (function(){var el=$('r_st_type'); return (el && el.value) || 'nessuna';})(),
         mm: +$('r_st_mm').value||NaN,
-        leads: ($('r_st_leads')?.value)||'',
+        leads: ($('r_st_leads').value)||'',
         w: +$('r_st_w').value||NaN,
         hr: +$('r_st_hr').value||NaN,
         normMin: +$('r_st_norm_min').value||NaN
       };
-      const arrh = ($('r_arrh')?.value)||'';
+      var _a1=$('r_arrh'); const arrh = (_a1 && _a1.value) || '';
 
       const hr_formula = $('hrmax_formula').value;
       const hrmax_pred = hrPred(age, hr_formula);
@@ -447,7 +447,7 @@ $('step3_next').addEventListener('click',()=>{
     const rer= +$('r_rer').value||NaN, spo2= +$('r_spo2').value||NaN, borg= +$('r_borg').value||NaN;
     const sbp_rest= +$('c_sbp_rest').value||NaN, dbp_rest= +$('c_dbp_rest').value||NaN, sbp= +$('c_sbp').value||NaN, dbp= +$('c_dbp').value||NaN;
     const sbp1= +$('c_sbp1').value||NaN, dbp1= +$('c_dbp1').value||NaN, sbp3= +$('c_sbp3').value||NaN, dbp3= +$('c_dbp3').value||NaN;
-    const reason = ($('c_reason')?.value)||''; const symptoms = ($('c_symptoms')?.value)||'';
+    var _cr=$('c_reason'); var _cs=$('c_symptoms'); const reason = (_cr && _cr.value) || ''; const symptoms = (_cs && _cs.value) || '';
     const hr_formula = $('hrmax_formula').value;
     const hrmax_pred = hrPred(age, hr_formula);
     const hr_pct = (isFinite(hrmax)&&isFinite(hrmax_pred))? 100*hrmax/hrmax_pred : NaN;
@@ -522,7 +522,7 @@ $('step3_next').addEventListener('click',()=>{
 
 /* Navigation */
 $('back_to_1').addEventListener('click',()=>goto(1));
-$('back_to_2a')?.addEventListener('click',()=>goto(2));
+if($('back_to_2a')){$('back_to_2a').addEventListener('click',()=>goto(2));}
 $('step2_next').addEventListener('click',()=>goto(3));
 
 /* Restart */
