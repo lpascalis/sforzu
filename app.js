@@ -40,6 +40,13 @@ function pct(a,b){ return (isFinite(a)&&isFinite(b)&&b>0)? 100*a/b : NaN; }
 function round(x,n=0){ const p=10**n; return Math.round(x*p)/p; }
 function hrPred(age, formula){ return formula==='tanaka' ? (208 - 0.7*age) : (220 - age); }
 
+function textifyNum(v, unit='', digits=0){
+  if(!isFinite(v)) return 'n.d.';
+  const val = (digits>0)? Number(v).toFixed(digits) : Math.round(v);
+  return unit ? (val+' '+unit) : (''+val);
+}
+
+
 /* Quick predictions (educational placeholders) */
 function quickPred(age,sex,h_cm){
   const h=h_cm/100; let fev1,fvc;
@@ -284,12 +291,12 @@ function longReportWatt(ctx){
   const positive = ( (st.type!=='nessuna' && isFinite(st.mm) && st.mm>=1) || (symptoms.toLowerCase().includes('dolore toracico tipico')) );
   const concl = positive? 'positivo' : 'negativo';
 
-  return `Il test da sforzo al cicloergometro è stato eseguito con protocollo a rampa incrementale di ${inc??'n.d.'} W/min, con carico iniziale di ${start??'n.d.'} W.
+  return `Il test da sforzo al cicloergometro è stato eseguito con protocollo a rampa incrementale di ${isFinite(inc)?inc:'n.d.'} W/min, con carico iniziale di ${isFinite(start)?start:'n.d.'} W.
 Il paziente si è presentato in condizioni basali stabili, ritmo sinusale a ${isFinite(hrrest)?Math.round(hrrest):'n.d.'} bpm, pressione arteriosa di ${isFinite(sbpr)?sbpr:'n.d.'}/${isFinite(dbpr)?dbpr:'n.d.'} mmHg, assenza di sintomi riferiti a riposo.
 
-Durante la prova il paziente ha raggiunto un carico massimo di ${isFinite(wpeak)?Math.round(wpeak):'n.d.'} W (equivalente a ${isFinite(mets)?mets.toFixed(1):'n.d.'} METs, pari a ${isFinite(wpct)?Math.round(wpct):'n.d.'}% del valore predetto), interrotto per ${reason||'n.d.'} dopo ${isFinite(dur)?dur:'n.d.'} minuti complessivi di esercizio. La frequenza cardiaca massima è stata di ${isFinite(hrmax)?Math.round(hrmax):'n.d.'} bpm (${isFinite(hr_pct)?Math.round(hr_pct):'n.d.'}% della teorica) con incremento ${ (isFinite(hrmax)&&isFinite(hrrest)&&hrmax>hrrest+20) ? 'adeguato' : 'limitato' } rispetto al basale. La risposta pressoria è risultata ${pressClass}, con valori massimi di ${isFinite(sbp)?sbp:'n.d.'}/${isFinite(dbp)?dbp:'n.d.'} mmHg.
+Durante la prova il paziente ha raggiunto un carico massimo di ${isFinite(wpeak)?Math.round(wpeak):'n.d.'} W (equivalente a ${isFinite(mets)?mets.toFixed(1):'n.d.'} METs, pari a ${isFinite(wpct)?Math.round(wpct):'n.d.'}% del valore predetto), interrotto per ${(reason && reason.trim()) || 'n.d.'} dopo ${isFinite(dur)?dur:'n.d.'} minuti complessivi di esercizio. La frequenza cardiaca massima è stata di ${isFinite(hrmax)?Math.round(hrmax):'n.d.'} bpm (${isFinite(hr_pct)?Math.round(hr_pct):'n.d.'}% della teorica) con incremento ${ (isFinite(hrmax)&&isFinite(hrrest)&&hrmax>hrrest+20) ? 'adeguato' : 'limitato' } rispetto al basale. La risposta pressoria è risultata ${pressClass}, con valori massimi di ${isFinite(sbp)?sbp:'n.d.'}/${isFinite(dbp)?dbp:'n.d.'} mmHg.
 
-Dal punto di vista clinico si rileva: ${symptoms or 'assenza di sintomi significativi'}${isFinite(borg)?` (Borg ${borg})`:''}.
+Dal punto di vista clinico si rileva: ${(symptoms && symptoms.trim()) || 'assenza di sintomi significativi'}${isFinite(borg)?` (Borg ${borg})`:''}.
 
 All’analisi elettrocardiografica: ${ecg}
 ${recov}
@@ -326,9 +333,9 @@ function longReportCPET(ctx){
 
 Durante la prova il paziente ha raggiunto un VO₂ di picco pari a ${isFinite(vo2kg)?vo2kg.toFixed(1):'n.d.'} mL·kg⁻¹·min⁻¹ (${isFinite(vo2kg_pct)?Math.round(vo2kg_pct):'n.d.'}% del predetto)${isFinite(vo2pk)?`, corrispondente a ${Math.round(vo2pk)} mL/min`:''}. RER massimo ${isFinite(rer)?rer.toFixed(2):'n.d.'}. Indici ventilatori: VE/VCO₂ slope ${isFinite(slope)?slope.toFixed(1):'n.d.'}, riserva ventilatoria (BR) ${isFinite(br)?Math.round(br):'n.d.'}%, OUES ${isFinite(oues)?oues.toFixed(2):'n.d.'}.
 
-L’esercizio è stato interrotto per ${reason||'n.d.'} dopo ${isFinite(dur)?dur:'n.d.'} minuti. FC massima ${isFinite(hrmax)?Math.round(hrmax):'n.d.'} bpm (${isFinite(hr_pct)?Math.round(hr_pct):'n.d.'}% del teorico). Pressione massima ${isFinite(sbp)?sbp:'n.d.'}/${isFinite(dbp)?dbp:'n.d.'} mmHg; risposta pressoria ${pressClass}. Nel recupero: HRR 1′ ${isFinite(hrr1)?Math.round(hrr1):'n.d.'} bpm, 3′ ${isFinite(hrr3)?Math.round(hrr3):'n.d.'} bpm.
+L’esercizio è stato interrotto per ${(reason && reason.trim()) || 'n.d.'} dopo ${isFinite(dur)?dur:'n.d.'} minuti. FC massima ${isFinite(hrmax)?Math.round(hrmax):'n.d.'} bpm (${isFinite(hr_pct)?Math.round(hr_pct):'n.d.'}% del teorico). Pressione massima ${isFinite(sbp)?sbp:'n.d.'}/${isFinite(dbp)?dbp:'n.d.'} mmHg; risposta pressoria ${pressClass}. Nel recupero: HRR 1′ ${isFinite(hrr1)?Math.round(hrr1):'n.d.'} bpm, 3′ ${isFinite(hrr3)?Math.round(hrr3):'n.d.'} bpm.
 
-Dal punto di vista clinico: ${symptoms or 'assenza di sintomi significativi'}${isFinite(borg)?` (Borg ${borg})`:''}.
+Dal punto di vista clinico: ${(symptoms && symptoms.trim()) || 'assenza di sintomi significativi'}${isFinite(borg)?` (Borg ${borg})`:''}.
 
 La prova può essere considerata ${mass}. La capacità funzionale globale appare ${eff}.
 
