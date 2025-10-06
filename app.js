@@ -1,146 +1,279 @@
+const $ = id => document.getElementById(id);
+const show = id => { document.querySelectorAll('.card').forEach(c=>c.classList.add('hidden')); $(id).classList.remove('hidden'); };
 
-const $=id=>document.getElementById(id);
-function go(which){$('screenStart').classList.add('hidden'); if(which==='watt') $('screenWatt').classList.remove('hidden'); else $('screenCPET').classList.remove('hidden'); }
-function back(){ $('screenStart').classList.remove('hidden'); $('screenWatt').classList.add('hidden'); $('screenCPET').classList.add('hidden'); }
-function toggle(id){ $(id).classList.toggle('hidden'); }
+let state = {
+  examType:'watt', ergometer:'cycle', profile:'standard',
+  age:null, sex:'M', weight:null, height:null,
+  protoStart:null, protoRamp:null, protoDur:null,
+  wPeak:null, hrRest:null, hrPeak:null, hr1:null, hr3:null,
+  sbpRest:null, sbpPeak:null, sbpRec:null, dbpRest:null, borg:null, dur:null,
+  vo2:null, at:null, rer:null, spo2:null, slope:null, dvo2dw:null, oues:null, br:null,
+  petco2r:null, petco2at:null, petco2p:null, vdvt:null,
+  fev1:null, fvc:null, ratio:null, spiroModel:'rapid'
+};
+
+// NAV
+$('toStep1').onclick = ()=>{
+  ['examType','ergometer','profile','sex'].forEach(k=>state[k]=$(k).value);
+  ['age','weight','height'].forEach(k=>state[k]=+($(k).value||0));
+  suggestProtocol(); show('step-1');
+};
+$('back0').onclick = ()=>show('step-0');
+
+$('toStep2').onclick = ()=>{
+  ['protoStart','protoRamp','protoDur'].forEach(k=>state[k]=+($(k).value||0));
+  show('step-2');
+};
+$('back1').onclick = ()=>show('step-1');
+
+$('toStep3').onclick = ()=>{
+  ['wPeak','hrRest','hrPeak','hr1','hr3','sbpRest','sbpPeak','sbpRec','dbpRest','borg','dur'].forEach(k=>state[k]=+($(k).value||0));
+  if(state.examType==='watt'){ $('ventBlock').classList.add('hidden'); $('ventNote').textContent='Watt test selezionato: modulo ventilatorio non richiesto.'; }
+  else { $('ventBlock').classList.remove('hidden'); $('ventNote').textContent=''; }
+  show('step-3');
+};
+$('back2').onclick = ()=>show('step-2');
+
+$('toStep4').onclick = ()=>{
+  if(state.examType==='cpet'){
+    ['vo2','at','rer','spo2','slope','dvo2dw','oues','br','petco2r','petco2at','petco2p','vdvt','fev1','fvc','ratio'].forEach(k=>state[k]=+($(k).value||0));
+    state.spiroModel = $('spiroModel').value;
+    computeSpirometry();
+  }
+  renderAdequacy(); show('step-4');
+};
+$('back3').onclick = ()=>show('step-3');
+
+$('toStep5').onclick = ()=>{ renderResults(); show('step-5'); };
+$('restart').onclick = ()=>window.location.reload();
 
 // Helpers
-const clamp=(x,a,b)=>Math.max(a,Math.min(b,x));
-const round=(x,n=0)=> (isFinite(x)? Number(x).toFixed(n):'—');
-const hrMax=(age,profile)=> profile==='beta'? Math.round(164 - 0.7*age) : Math.round(208 - 0.7*age);
-const MET_from_Watts=(W, weightKg)=> (W>0 && weightKg>0)? (W*6.12)/(weightKg*3.5) : NaN;
-const Wpred_simple=(age,sex,weight,erg)=>{ // semplice lineare per avere un riferimento
-  const base = (sex==='M'? 3.0:2.2)*weight; // ~W a VO2 1 MET stepwise
-  const ageCorr = (sex==='M'? 0.6:0.5)*(50-Math.min(50,age));
-  const ergCorr = (erg==='cycle'? 0 : 40); // treadmill tende a valori più alti equivalenti
-  return Math.max(60, Math.round(base*0.25 + ageCorr + ergCorr));
-};
-const tag=(condOk,condWarn)=> condOk? 'ok' : (condWarn? 'warn':'bad');
-const kpi=(label,val,unit='',cls='',hint='')=> `<div class="kpi"><div>${label} <span class="small">${hint}</span></div><div><span class="tag ${cls}">${val}${unit? ' '+unit:''}</span></div></div>`;
+function hrMaxTheory(){ return 208 - 0.7*state.age; }
+function hrReserveIndex(){
+  const hm = hrMaxTheory();
+  const num = (state.hrPeak||0) - (state.hrRest||0);
+  const den = (hm||0) - (state.hrRest||0);
+  if(den<=0 || !isFinite(num/den)) return null;
+  return num/den;
+}
+function hrRecovery(t=1){ const v = t===1 ? state.hrPeak - state.hr1 : state.hrPeak - state.hr3; return isFinite(v)? v : null; }
+function dpPeak(){ return (state.hrPeak && state.sbpPeak)? state.hrPeak*state.sbpPeak : null; }
+function deltaPAS(){ return (state.sbpPeak!=null && state.sbpRest!=null)? (state.sbpPeak - state.sbpRest) : null; }
+function metFromWatt(){ if(!state.wPeak||!state.weight) return null; const vo2 = (state.wPeak*10.8/state.weight)+3.5; return vo2/3.5; }
+function predictedMETs(){ const base = state.sex==='M'?12.0:10.5; const adj = Math.max(0,(50-state.age))*0.05; return Math.max(4, base - (state.age-20)*0.06 + (state.sex==='M'?0.5:0) + adj); }
 
-// -------------------- WATT --------------------
-function suggestWatt(){
-  const erg=$('wt_erg').value, profile=$('wt_profile').value, age=+$('wt_age').value, sex=$('wt_sex').value, w=+$('wt_w').value;
-  const Wpred=Wpred_simple(age,sex,w,erg);
-  let ramp = 15; let start=20;
-  if(profile==='athlete'){ ramp=25; start=30; }
-  if(profile==='ihd'){ ramp=10; start=10; }
-  if(profile==='beta'){ ramp=10; }
-  $('wt_ramp').value=ramp; $('wt_wpk').placeholder=`~${Math.round(Wpred*0.9)} W`;
-  $('wt_out').innerHTML = `<div class="muted">Suggerimento protocollo: start ${start} W, rampa ${ramp} W/min • Pred. Watt ≈ ${Wpred} W</div>`;
+// Protocol suggestion
+function suggestProtocol(){
+  const {ergometer, profile} = state;
+  let start = ergometer==='cycle'?25:2;
+  let ramp  = ergometer==='cycle'?15:0.5;
+  let dur   = 10;
+  if(profile==='athlete'){ start = ergometer==='cycle'?50:3; ramp = ergometer==='cycle'?25:0.8; dur=10; }
+  if(profile==='ihd' || profile==='betablocker'){ start = ergometer==='cycle'?10:1.5; ramp = ergometer==='cycle'?10:0.3; dur=10; }
+  if(profile==='copd'){ start = ergometer==='cycle'?10:1.5; ramp = ergometer==='cycle'?10:0.3; dur=10; }
+  $('protoStart').value = start; $('protoRamp').value = ramp; $('protoDur').value = dur;
+  $('protoNote').textContent = ergometer==='cycle'
+    ? `Ciclo: start ${start} W, rampa ${ramp} W/min, durata ${dur} min.`
+    : `Treadmill: start ${start} km/h, incremento ${ramp} km/h/min, durata ${dur} min.`;
 }
 
-function calcWatt(){
-  const erg=$('wt_erg').value, profile=$('wt_profile').value;
-  const age=+$('wt_age').value, sex=$('wt_sex').value, w=+$('wt_w').value, h=+$('wt_h').value;
-  const hrR=+$('wt_hrR').value, hrP=+$('wt_hrP').value, hr1=+$('wt_hr1').value;
-  const sbpR=+$('wt_sbpR').value, sbpP=+$('wt_sbpP').value, sbpRec=+$('wt_sbpRec').value;
-  const dur=+$('wt_dur').value, ramp=+$('wt_ramp').value, Wpk=+$('wt_wpk').value;
-
-  const HRT = hrMax(age,profile);
-  const Wpred = Wpred_simple(age,sex,w,erg);
-  const met = MET_from_Watts(Wpk, w);
-  const metPred = MET_from_Watts(Wpred, w);
-  const pctW = Wpk>0? Math.round(100*Wpk/Wpred): NaN;
-  const chronoRes = (hrP-hrR)/(HRT-hrR);
-  const chronTag = tag(chronoRes>=0.8, chronoRes>=0.62);
-  const hrRec = hrP>0 && hr1>0 ? (hrP-hr1): NaN;
-  const hrRecTag = tag(hrRec>=12, hrRec>=8);
-  const pasRise = (sbpP>0 && sbpR>0) ? sbpP - sbpR : NaN;
-  const pasTag = tag((pasRise>=20 && sbpP<230), (pasRise>=10 && sbpP<230));
-
-  let k=[];
-  k.push(kpi("Watt picco", isFinite(Wpk)?Wpk:'—', "W"));
-  k.push(kpi("Watt/kg", isFinite(Wpk)&&w? round(Wpk/w,2):'—', "W/kg"));
-  k.push(kpi("% Watt predetto", isFinite(pctW)? pctW : '—', "%"));
-  k.push(kpi("METs (ciclo, stima)", isFinite(met)? round(met,1):'—', "MET", '', `Pred: ${isFinite(metPred)? round(metPred,1):'—'}`));
-  if(dur) k.push(kpi("Durata esercizio", round(dur,1), "min"));
-  if(ramp) k.push(kpi("Rampa", ramp, "W/min"));
-  if(hrR) k.push(kpi("FC riposo", hrR, "bpm"));
-  if(hrP) k.push(kpi("FC picco", hrP, "bpm", tag(hrP>=0.85*HRT, hrP>=0.8*HRT), `Teorica ${HRT} bpm`));
-  if(isFinite(chronoRes)) k.push(kpi("Riserva cronotropa", round(chronoRes,2), "", chronTag, chronoRes>=0.8?"Adeguata":(chronoRes>=0.62?"Borderline":"Ridotta")));
-  if(isFinite(hrRec)) k.push(kpi("HR recovery 1’", hrRec, "bpm", hrRecTag, hrRec>=12?"Adeguato":(hrRec>=8?"Borderline":"Ridotto")));
-  if(sbpR) k.push(kpi("PAS riposo", sbpR, "mmHg"));
-  if(sbpP) k.push(kpi("PAS picco", sbpP, "mmHg", pasTag, (pasRise?`Δ ${pasRise} mmHg`:"")));
-  if(sbpRec) k.push(kpi("PAS 3’ recupero", sbpRec, "mmHg"));
-
-  $('wt_out').innerHTML = `<h3>Risultati</h3>${k.join('')}`;
-}
-
-// -------------------- CPET --------------------
-function suggestCPET(){
-  const erg=$('cp_erg').value, profile=$('cp_profile').value, age=+$('cp_age').value, sex=$('cp_sex').value, w=+$('cp_w').value;
-  const Wpred=Wpred_simple(age,sex,w,erg);
-  const ramp = (profile==='athlete')? 25 : (profile==='ihd'||profile==='beta'?10:15);
-  $('cp_out').innerHTML = `<div class="muted">Suggerimento: rampa ${ramp} W/min • riferimento Watt ≈ ${Wpred} W • obiettivo 8–12 min</div>`;
-}
-
-function calcCPET(){
-  const age=+$('cp_age').value, sex=$('cp_sex').value, w=+$('cp_w').value, h=+$('cp_h').value;
-  const vo2=+$('cp_vo2pk').value, vat=+$('cp_vat').value, rer=+$('cp_rer').value;
-  const slope=+$('cp_slope').value, dvow=+$('cp_dvow').value, oues=+$('cp_oues').value;
-  const vepk=+$('cp_vepk').value, mvvIn=+$('cp_mvv').value, spo2=+$('cp_spo2').value;
-  const fev1=+$('sp_fev1').value, fvc=+$('sp_fvc').value, ratio=+$('sp_ratio').value;
-
-  // Predetti basilari (semplificati): VO2peak/kg
-  const vo2pred = (sex==='M'? 45 : 38) - 0.2*(age-30); // riferimento grezzo per avere %
-  const vo2pct = isFinite(vo2) ? Math.round(100*vo2/vo2pred) : NaN;
-
-  // Weber class (cardio-centric) basata su VO2peak/kg
-  const weber = isFinite(vo2)? (vo2<10?'D': vo2<14?'C': vo2<20?'B':'A') : '—';
-
-  // VE/VCO2 slope classi
-  let slopeTag='', slopeTxt='—';
-  if(slope){
-    if(slope<30){ slopeTag='ok'; slopeTxt='<30 (migliore prognosi)'; }
-    else if(slope<36){ slopeTag='warn'; slopeTxt='30–35 (intermedio)'; }
-    else { slopeTag='bad'; slopeTxt='≥36 (sfavorevole)'; }
+// Adequacy
+function adequacy(){
+  let flags=[];
+  if(state.dur){
+    if(state.dur>=8 && state.dur<=12) flags.push(['Durata','ok',`${state.dur.toFixed(1)} min`]);
+    else if(state.dur>=6 && state.dur<=13) flags.push(['Durata','warn',`${state.dur.toFixed(1)} min`]);
+    else flags.push(['Durata','bad',`${state.dur.toFixed(1)} min`]);
   }
-
-  // BR% (VE/MVV)
-  let MVV = mvvIn>0? mvvIn : (fev1>0? fev1*40 : NaN);
-  let br = (vepk>0 && MVV>0)? 100*vepk/MVV : NaN;
-  let brTag='', brHint=''; 
-  if(isFinite(br)){
-    if(br<80){ brTag='ok'; brHint='normale'; }
-    else if(br<=85){ brTag='warn'; brHint='borderline'; }
-    else { brTag='bad'; brHint='limitazione ventilatoria'; }
+  if(state.examType==='cpet' && state.rer){
+    if(state.rer>=1.10) flags.push(['RER','ok',state.rer.toFixed(2)]);
+    else if(state.rer>=1.05) flags.push(['RER','warn',state.rer.toFixed(2)]);
+    else flags.push(['RER','bad',state.rer.toFixed(2)]);
   }
+  const hri = hrReserveIndex();
+  if(hri!=null){
+    if(hri>=0.80) flags.push(['Riserva cronotropa','ok',(hri*100).toFixed(0)+'%']);
+    else if(hri>=0.62) flags.push(['Riserva cronotropa','warn',(hri*100).toFixed(0)+'%']);
+    else flags.push(['Riserva cronotropa','bad',(hri*100).toFixed(0)+'%']);
+  } else if(state.hrPeak && state.age){
+    const pct = state.hrPeak/hrMaxTheory();
+    if(pct>=0.90) flags.push(['HR% teorica','ok',(pct*100).toFixed(0)+'%']);
+    else if(pct>=0.85) flags.push(['HR% teorica','warn',(pct*100).toFixed(0)+'%']);
+    else flags.push(['HR% teorica','bad',(pct*100).toFixed(0)+'%']);
+  }
+  const dpas = deltaPAS();
+  if(dpas!=null){
+    if(dpas>=20) flags.push(['ΔPAS','ok', dpas+' mmHg']);
+    else if(dpas>=10) flags.push(['ΔPAS','warn', dpas+' mmHg']);
+    else flags.push(['ΔPAS','bad', dpas+' mmHg']);
+  }
+  const ok = flags.filter(f=>f[1]==='ok').length;
+  const bad = flags.filter(f=>f[1]==='bad').length;
+  const verdict = bad>=2 ? 'Submassimale' : (ok>=2 ? 'Massimale' : 'Borderline');
+  return {verdict, flags};
+}
+function renderAdequacy(){
+  const {verdict, flags} = adequacy();
+  const chip = (cls, k, v)=>`<div class="kpi"><div><strong>${k}</strong><br><small>${v}</small></div><span class="badge ${cls}">${cls==='ok'?'OK':(cls==='warn'?'Borderline':'Ridotto')}</span></div>`;
+  $('adequacy').innerHTML = `<h3>Esito: ${verdict}</h3>` + flags.map(f=>chip(f[1], f[0], f[2])).join('');
+}
 
-  // Pattern spirometrico (GLI-lite, senza tabelle): soglie pragmatiche se assenti LMS
-  let spTxt='—', spTag='';
-  if(fev1 && fvc){
-    const ratioCalc = ratio? ratio : (100*fev1/fvc);
-    let llr = age>=40? 70 : 75; // cut pragmatico % per semplicità
-    if(ratioCalc < llr){
-      spTag='bad'; spTxt='ostruttivo probabile';
+// Spirometry quick + ANE 2023 beta
+function computeSpirometry(){
+  const h_m = state.height? state.height/100 : null;
+  const age = state.age; const sex = state.sex;
+  let {fev1,fvc,ratio} = state;
+  if(!ratio && fev1 && fvc){ ratio = (fev1/fvc)*100; state.ratio = ratio; const r=$('ratio'); if(r) r.value=ratio.toFixed(1); }
+  let out=[];
+  if(state.spiroModel==='rapid' && h_m && age){
+    const predFEV1 = (sex==='M'?4.30:3.80) - 0.029*age + (sex==='M'?0:-0.1);
+    const predFVC  = (sex==='M'?5.60:4.60) - 0.034*age;
+    const predR    = (sex==='M'?80:82);
+    appendSpiro(out, fev1, fvc, ratio, predFEV1, predFVC, predR);
+  } else if(state.spiroModel==='ane2023' && h_m && age){
+    const lnH = Math.log(h_m), lnA = Math.log(age);
+    let predFEV1, predFVC, predR;
+    if(sex==='F'){
+      predFEV1 = Math.exp(-10.901689 + 2.385928*lnH - 0.076386*lnA - 0.05);
+      predFVC  = Math.exp(-12.055901 + 2.621579*lnH - 0.035975*lnA - 0.05);
+      predR    = Math.exp(0.9189568 - 0.1840671*lnH - 0.0461306*lnA);
     } else {
-      // poss restrizione se FVC bassa vs attesa grezza
-      const fvcPred = (sex==='M'? (0.063*h - 5.5) : (0.049*h - 3.6)); // litri approssimativi
-      if(fvc < 0.8*fvcPred){ spTag='warn'; spTxt='possibile restrizione'; }
-      else { spTag='ok'; spTxt='nei limiti'; }
+      predFEV1 = Math.exp(-11.399108 + 2.462664*lnH - 0.011394*lnA - 0.05);
+      predFVC  = Math.exp(-12.629131 + 2.727421*lnH + 0.009174*lnA - 0.05);
+      predR    = Math.exp(1.022608 - 0.218592*lnH - 0.027586*lnA);
     }
+    appendSpiro(out, fev1, fvc, ratio, predFEV1, predFVC, predR*100);
   }
-
-  // Conclusione compatta
-  let patt=[];
-  if(isFinite(vo2pct) && vo2pct<80) patt.push('bassa capacità aerobica');
-  if(slopeTag==='bad') patt.push('ventilazione inefficiente');
-  if(brTag==='bad') patt.push('riserva ventilatoria ridotta');
-  if(spo2 && spo2<94) patt.push('desaturazione da sforzo');
-  if(patt.length===0) patt.push('performance globale nei limiti o lievi alterazioni');
-
-  let k=[];
-  if(isFinite(vo2)) k.push(kpi("VO₂ picco", round(vo2,1), "ml/kg/min", tag(vo2>=vo2pred*0.8, vo2>=vo2pred*0.7), `Pred ~${round(vo2pred,0)} • ${isFinite(vo2pct)?vo2pct+'%':''}`));
-  if(isFinite(vat)) k.push(kpi("Soglia anaerobica (AT)", round(vat,1), "ml/kg/min", tag(vat>=0.4*vo2pred, vat>=0.3*vo2pred)));
-  if(rer) k.push(kpi("RER picco", round(rer,2), "", tag(rer>=1.10, rer>=1.05), rer>=1.10?"massimale":""));
-  if(slope) k.push(kpi("VE/VCO₂ slope", round(slope,1), "", slopeTag, slopeTxt));
-  if(isFinite(dvow)) k.push(kpi("ΔVO₂/ΔW", round(dvow,0), "ml/min/W", tag(dvow>=8, dvow>=7)));
-  if(isFinite(oues)) k.push(kpi("OUES", round(oues,2), "", tag(oues>=1.4, oues>=1.2)));
-  if(isFinite(br)) k.push(kpi("BR% (VE/MVV)", round(br,0), "%", brTag, brHint));
-  if(spo2) k.push(kpi("SpO₂ minima", round(spo2,0), "%", tag(spo2>=94, spo2>=90)));
-  if(fev1||fvc||ratio) k.push(kpi("Spirometria (pattern)", spTxt, "", spTag));
-
-  $('cp_out').innerHTML = `<h3>Risultati</h3>${k.join('')}<hr><div class="muted">Conclusione: ${patt.join(' • ')}</div><div class="small muted">Nota: interpretazione automatica di supporto clinico, non sostituisce il giudizio medico.</div>`;
+  const el = $('spiroOut'); if(el) el.innerHTML = out.join('<br>');
+}
+function appendSpiro(out, fev1, fvc, ratio, Pfev1, Pfvc, Pratio){
+  const fev1pp = fev1 && Pfev1? (fev1/Pfev1*100).toFixed(0)+'%' : '—';
+  const fvcpp  = fvc && Pfvc? (fvc/Pfvc*100).toFixed(0)+'%' : '—';
+  const rpp    = ratio && Pratio? ((ratio/Pratio)*100).toFixed(0)+'%' : '—';
+  const pattern = inferPattern(fev1, fvc, ratio, Pfev1, Pfvc, Pratio);
+  out.push(`Predetti: FEV₁ ${Pfev1?Pfev1.toFixed(2):'—'} L · FVC ${Pfvc?Pfvc.toFixed(2):'—'} L · FEV₁/FVC ${Pratio?Pratio.toFixed(0):'—'}%`);
+  out.push(`%pred: FEV₁ ${fev1pp} · FVC ${fvcpp} · Rapporto ${rpp}`);
+  out.push(`<span class="tag">Pattern: ${pattern}</span>`);
+}
+function inferPattern(fev1, fvc, ratio, Pfev1, Pfvc, Pratio){
+  if(!fev1||!fvc||!ratio||!Pratio) return 'dati incompleti';
+  const llnRatio = 0.7*Pratio; // proxy LLN
+  if(ratio < llnRatio || ratio < 70){
+    if(fev1 < 0.8*Pfev1) return 'ostruttivo (FEV₁ ridotto)';
+    return 'ostruttivo lieve';
+  }
+  if(fvc < 0.8*Pfvc) return 'possibile restrizione';
+  return 'nei limiti';
 }
 
+// KPI helpers
+function kpi(name, value, cls=null){
+  const badge = cls? `<span class="badge ${cls}">${cls==='ok'?'OK':(cls==='warn'?'Borderline':'Ridotto')}</span>` : '';
+  return `<div class="kpi"><div><strong>${name}</strong><br><small>${value}</small></div>${badge}</div>`;
+}
+
+// CPET interpretation (soglie tipiche)
+function interpretCPET(){
+  let rows=[];
+
+  // VO2 peak
+  if(state.vo2){
+    const weber = state.vo2>=20?'A':(state.vo2>=16?'B':(state.vo2>=10?'C':'D'));
+    rows.push(kpi('VO₂ peak', `${state.vo2.toFixed(1)} ml/kg/min · classe ${weber}`, state.vo2>=16?'ok':(state.vo2>=14?'warn':'bad')));
+  }
+
+  // AT %
+  if(state.at && state.vo2){
+    const atpct = state.at/state.vo2*100;
+    const cls = atpct>=60?'ok':(atpct>=40?'warn':'bad');
+    rows.push(kpi('AT (soglia anaerobica)', `${state.at.toFixed(1)} ml/kg/min (${atpct.toFixed(0)}% del picco)`, cls));
+  }
+
+  // VE/VCO2 slope
+  if(state.slope){
+    let cls='ok'; if(state.slope>35) cls='bad'; else if(state.slope>30) cls='warn';
+    rows.push(kpi('VE/VCO₂ slope', state.slope.toFixed(1), cls));
+  }
+
+  // BR%
+  if(state.br){
+    let cls='ok'; if(state.br>85) cls='bad'; else if(state.br>80) cls='warn';
+    rows.push(kpi('BR% (VE/MVV×100)', `${state.br.toFixed(0)}%`, cls));
+  }
+
+  // RER
+  if(state.rer){
+    const cls = state.rer>=1.10?'ok':(state.rer>=1.05?'warn':'bad');
+    rows.push(kpi('RER', state.rer.toFixed(2), cls));
+  }
+
+  // SpO2
+  if(state.spo2){
+    const cls = state.spo2>=94?'ok':(state.spo2>=90?'warn':'bad');
+    rows.push(kpi('SpO₂ minima', `${state.spo2.toFixed(0)}%`, cls));
+  }
+
+  if(state.dvo2dw) rows.push(kpi('ΔVO₂/ΔW', state.dvo2dw.toFixed(2)));
+  if(state.oues)   rows.push(kpi('OUES', state.oues.toFixed(2)));
+  if(state.petco2at) rows.push(kpi('PetCO₂ @AT', `${state.petco2at.toFixed(0)} mmHg`));
+  if(state.vdvt) rows.push(kpi('VD/VT', state.vdvt.toFixed(2)));
+
+  rows.push(`<hr><div class="notice">${inferMatrixCPET()}</div>`);
+  return rows.join('');
+}
+
+// Matrix indicativa
+function inferMatrixCPET(){
+  let cardio=false, ventil=false, decond=false, effort=false;
+
+  if(state.vo2 && state.vo2<16) cardio=true;
+  if(state.at && state.vo2 && (state.at/state.vo2*100)<40) cardio=true;
+  if(state.slope && state.slope>35) ventil=true;
+  if(state.br && state.br>85) ventil=true;
+  if(state.spo2 && state.spo2<92) ventil=true;
+  if(state.vo2 && state.vo2<16 && !ventil) decond=true;
+  if(state.rer && state.rer<1.05) effort=true;
+
+  let tags=[];
+  if(ventil) tags.push('Limitazione ventilatoria probabile');
+  if(cardio) tags.push('Componente cardiocircolatoria probabile');
+  if(decond) tags.push('Decondizionamento plausibile');
+  if(effort) tags.push('Sforzo subottimale');
+  if(tags.length===0) tags.push('Profilo globale nei limiti o non dirimente');
+  return tags.join(' · ');
+}
+
+// Watt test
+function interpretWatt(){
+  let rows=[];
+  if(state.wPeak) rows.push(kpi('Watt picco', state.wPeak+' W'));
+  const mets = metFromWatt(); if(mets) rows.push(kpi('METs stimati', mets.toFixed(1)+' METs', mets>=8?'ok':(mets>=5?'warn':'bad')));
+  const pMET = predictedMETs(); if(pMET) rows.push(kpi('METs predetti (stima)', pMET.toFixed(1)+' METs'));
+  const hrr1 = hrRecovery(1); if(hrr1!=null) rows.push(kpi('HR recovery 1′', hrr1+' bpm', hrr1>=12?'ok':(hrr1>=8?'warn':'bad')));
+  const hrr3 = hrRecovery(3); if(hrr3!=null) rows.push(kpi('HR recovery 3′', hrr3+' bpm'));
+  const hri = hrReserveIndex(); if(hri!=null){ const cls = hri>=0.80?'ok':(hri>=0.62?'warn':'bad'); rows.push(kpi('Riserva cronotropa', (hri*100).toFixed(0)+'%', cls)); }
+  const dpas = deltaPAS(); if(dpas!=null) rows.push(kpi('ΔPAS', dpas+' mmHg', dpas>=20?'ok':(dpas>=10?'warn':'bad')));
+  const dp = dpPeak(); if(dp) rows.push(kpi('Doppio prodotto', dp.toLocaleString()));
+  return rows.join('');
+}
+
+// Results rendering
+function renderResults(){
+  const {verdict} = adequacy();
+  let html = `<h3>Adeguatezza: ${verdict}</h3>`;
+  html += `<h3>Indici principali</h3>`;
+  if(state.examType==='cpet'){ html += interpretCPET(); }
+  else { html += interpretWatt(); }
+  if(state.examType==='cpet' && state.fev1 && state.fvc){ html += `<hr><h3>Spirometria</h3>${$('spiroOut').innerHTML}`; }
+  $('results').innerHTML = html;
+  const text = html.replace(/<[^>]+>/g,'').replace(/\s+\n/g,'\n');
+  $('copyBtn').onclick = async ()=>{
+    try{ await navigator.clipboard.writeText(text); const b=$('copyBtn'); b.textContent='✅ Copiato'; setTimeout(()=>b.textContent='📋 Copia referto sintetico',1500);}catch(e){ alert('Copia non riuscita'); }
+  };
+}
+
+// Start
+show('step-0');
+
+// PWA
+if('serviceWorker' in navigator){ window.addEventListener('load',()=>{ navigator.serviceWorker.register('./sw.js'); }); }
